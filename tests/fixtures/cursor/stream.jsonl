@@ -1,0 +1,9 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/tmp/ws","session_id":"c-1","model":"Claude 4.5 Sonnet","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"## Planning task ..."}]},"session_id":"c-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Let me look at the project structure."}]},"session_id":"c-1"}
+{"type":"tool_call","subtype":"started","call_id":"t1","tool_call":{"shellToolCall":{"args":{"command":"ls -la"}}},"session_id":"c-1"}
+{"type":"tool_call","subtype":"completed","call_id":"t1","tool_call":{"shellToolCall":{"args":{"command":"ls -la"},"result":{"success":{"exitCode":0}}}},"session_id":"c-1"}
+{"type":"tool_call","subtype":"started","call_id":"t2","tool_call":{"writeToolCall":{"args":{"path":"/tmp/ws/.orchestrator/plan.md","fileText":"# Plan\n"}}},"session_id":"c-1"}
+{"type":"tool_call","subtype":"completed","call_id":"t2","tool_call":{"writeToolCall":{"args":{"path":"/tmp/ws/.orchestrator/plan.md"},"result":{"success":{"linesCreated":12}}}},"session_id":"c-1"}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Wrote a 3-step plan to .orchestrator/plan.md."}]},"session_id":"c-1"}
+{"type":"result","subtype":"success","duration_ms":9120,"is_error":false,"result":"Wrote a 3-step plan to .orchestrator/plan.md.","session_id":"c-1"}

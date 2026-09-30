@@ -1,0 +1,5 @@
+I'll start by reading the task file.
+✓ Read .orchestrator/tasks/1.md
+✓ Edit src/greeting.ts
+● Run npm test
+Created the greeting module and a passing test.

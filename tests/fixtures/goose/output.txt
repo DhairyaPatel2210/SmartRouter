@@ -1,0 +1,7 @@
+starting session | provider: ollama model: qwen2.5-coder:7b
+    logging to /Users/me/.local/share/goose/sessions/x.jsonl
+    working directory: /tmp/ws
+─── text_editor | developer ──────────────────────────
+path: src/greeting.py
+command: write
+I created src/greeting.py with a greet() function.

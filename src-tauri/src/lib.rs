@@ -1,5 +1,8 @@
+pub mod adapters;
 pub mod brand;
 pub mod db;
+pub mod proc;
+pub mod providers;
 pub mod settings;
 pub mod types;
 
@@ -11,4 +14,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// `--fake-provider <port>`: serve the fake OpenAI-compatible API until killed.
+pub fn run_fake_provider(port: u16) {
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("runtime");
+    rt.block_on(async {
+        let srv = providers::fake::start(port).await.expect("bind");
+        println!("fake provider listening on {}", srv.base_url());
+        std::future::pending::<()>().await;
+    });
 }
