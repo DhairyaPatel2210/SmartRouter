@@ -1,0 +1,9 @@
+{
+  "productName": "Hybrid Agent Orchestrator",
+  "shortName": "Orchestrator",
+  "bundleId": "dev.orchestrator.app",
+  "dataDirName": "orchestrator",
+  "handoffDirName": ".orchestrator",
+  "cliName": "orch",
+  "tagline": "Paid agents think. Open-source agents do the rest."
+}
