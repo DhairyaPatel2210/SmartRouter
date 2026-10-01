@@ -768,14 +768,25 @@ pub async fn ollama_stop(s: S<'_>) -> Res<OllamaStatus> {
 /// Pausing = cancelling; Ollama keeps partial downloads so a later pull resumes.
 #[tauri::command]
 pub async fn pull_model(s: S<'_>, name: String) -> Res<()> {
+    // Returns at once; starting Ollama and the download report progress as events.
     let core = s.core.clone();
-    let settings = core.db.settings();
-    core.ollama.ensure_running(&settings, &core.registry, crate::macos::hardware().total_mem_gb).await.map_err(e)?;
     let cancel = CancelToken::default();
     if core.pulls.lock().insert(name.clone(), cancel.clone()).is_some() {
         return Err("Already downloading.".into());
     }
+    log::info!("pull {name}: starting");
     tauri::async_runtime::spawn(async move {
+        let settings = core.db.settings();
+        if core.ollama.client().version().await.is_none() {
+            core.bus.send(UiEvent::Pull { model: name.clone(), status: "Starting Ollama…".into(), completed: 0, total: 0, done: None, error: None });
+        }
+        if let Err(err) = core.ollama.ensure_running(&settings, &core.registry, crate::macos::hardware().total_mem_gb).await {
+            core.pulls.lock().remove(&name);
+            log::warn!("pull {name}: {err:#}");
+            core.bus.send(UiEvent::Pull { model: name, status: "stopped".into(), completed: 0, total: 0, done: Some(false), error: Some(format!("{err:#}")) });
+            return;
+        }
+        core.bus.send(UiEvent::Pull { model: name.clone(), status: "Connecting to the model registry…".into(), completed: 0, total: 0, done: None, error: None });
         let client = core.ollama.client();
         let c2 = core.clone();
         let mut last = std::time::Instant::now() - std::time::Duration::from_secs(1);
@@ -796,6 +807,7 @@ pub async fn pull_model(s: S<'_>, name: String) -> Res<()> {
             })
             .await;
         core.pulls.lock().remove(&name);
+        log::info!("pull {name}: {}", match &r { Ok(()) => "done".to_string(), Err(e) => format!("{e:#}") });
         let (done, error) = match r {
             Ok(()) => (Some(true), None),
             Err(err) if cancel.is_cancelled() => (Some(false), Some(format!("Paused: {err}"))),
@@ -1141,11 +1153,17 @@ pub async fn smoke_test(s: S<'_>, entry: ExecutorEntry) -> Res<SmokeResult> {
         let settings = s.core.db.settings();
         s.core.ollama.ensure_running(&settings, &s.core.registry, crate::macos::hardware().total_mem_gb).await.map_err(e)?;
     }
-    let base = if m.provider_type == ProviderType::Ollama {
-        m.base_url.clone().unwrap_or_else(|| providers::OLLAMA_DEFAULT.into())
-    } else {
-        m.base_url.clone().unwrap_or_default()
-    };
+    if m.provider_type == ProviderType::Ollama {
+        log::info!("smoke test: {} + {}", agent.display_name(), m.name);
+        return Ok(match s.core.ollama.client().quick_check(&m.name).await {
+            Ok(secs) => {
+                s.core.governor.mark_loaded(&m.name);
+                SmokeResult { ok: true, message: format!("{} + {}: answered in {secs:.1}s", agent.display_name(), m.label()) }
+            }
+            Err(err) => SmokeResult { ok: false, message: format!("{err:#}") },
+        });
+    }
+    let base = m.base_url.clone().unwrap_or_default();
     let key = m.key_ref.as_deref().and_then(keychain::get);
     match providers::smoke_test(m.provider_type, &base, key.as_deref(), &m.name).await {
         Ok(msg) => {

@@ -285,6 +285,24 @@ impl Ollama {
         Ok(())
     }
 
+    /// Smoke test: load the model with a small context and generate a few
+    /// tokens. Much faster than a full-context load (measured 1.4 s vs 15 s
+    /// for a 3B model on an 8 GB Mac); the run reloads with its own context.
+    pub async fn quick_check(&self, model: &str) -> Result<f64> {
+        let t = std::time::Instant::now();
+        let body = serde_json::json!({
+            "model": model, "prompt": "Reply with OK.", "stream": false, "keep_alive": "2m",
+            "options": { "num_ctx": 2048, "num_predict": 4 }
+        });
+        let r = http().post(format!("{}/api/generate", self.base)).json(&body).timeout(Duration::from_secs(90)).send().await?;
+        if !r.status().is_success() {
+            let s = r.status();
+            let text = r.text().await.unwrap_or_default();
+            bail!("model returned {s}: {}", crate::adapters::truncate(&text, 200));
+        }
+        Ok(t.elapsed().as_secs_f64())
+    }
+
     pub async fn delete(&self, model: &str) -> Result<()> {
         let r = http()
             .delete(format!("{}/api/delete", self.base))

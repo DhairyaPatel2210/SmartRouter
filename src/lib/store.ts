@@ -287,6 +287,16 @@ export async function boot() {
   api.resourceSnapshot().then((snapshot) => useApp.setState({ snapshot }), () => {});
 }
 
+/** Starts a model download with instant feedback (progress arrives as events). */
+export async function startPull(name: string) {
+  useApp.setState((s) => ({ pulls: { ...s.pulls, [name]: { status: "Preparing download…", completed: 0, total: 0, done: null, error: null } } }));
+  try {
+    await api.pullModel(name);
+  } catch (e) {
+    useApp.setState((s) => ({ pulls: { ...s.pulls, [name]: { status: "stopped", completed: 0, total: 0, done: false, error: String(e) } } }));
+  }
+}
+
 export const tierLabel: Record<T.Tier, string> = { local: "Local", cheap_cloud: "Cheap cloud", premium: "Premium" };
 
 export function modeName(settings: T.Settings | null, id: string): string {

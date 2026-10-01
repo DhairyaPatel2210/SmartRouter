@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ArrowRight, Bot, Check, Cloud, Cpu, Download, FlaskConical, FolderOpen, HardDrive, Laptop, Library, Loader2, Sparkles } from "lucide-react";
-import { useApp } from "../lib/store";
+import { startPull, useApp } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import type { ScanResult, Suggestion } from "../lib/types";
 import { Badge, Button, Card, Progress, Spinner, Switch } from "../components/ui";
@@ -144,6 +144,15 @@ function ExecutorStep({ scan, budget, onNext }: { scan: ScanResult | null; budge
   const [choice, setChoice] = useState<"local" | "cloud">(localPossible ? "local" : "cloud");
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<string | null>(null);
+  const [phaseStart, setPhaseStart] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!phase) return;
+    const t = setInterval(() => tick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+  const skipTest = useRef(false);
   const [install, setInstall] = useState<"opencode" | "ollama" | null>(null);
   const [folder, setFolder] = useState<string | null>(null);
   const opencode = agents.find((a) => a.id === "opencode");
@@ -159,15 +168,21 @@ function ExecutorStep({ scan, budget, onNext }: { scan: ScanResult | null; budge
 
   const connectLocal = async (name: string) => {
     setBusy(true);
+    skipTest.current = false;
     try {
+      setPhase("Connecting the model to OpenCode…");
+      setPhaseStart(Date.now());
       const st = await api.connectModel({ agent_id: "opencode", provider_id: "ollama", name, target: "pool_front" });
       setSettings(st);
+      setPhase("Loading the model into memory for a quick test (the first load can take ~15 s)…");
+      setPhaseStart(Date.now());
       const r = await api.smokeTest(st.executor_pool[0]);
-      setStatus(r);
+      if (!skipTest.current) setStatus(r);
     } catch (e) {
-      setStatus({ ok: false, message: errorText(e) });
+      if (!skipTest.current) setStatus({ ok: false, message: errorText(e) });
     } finally {
       setBusy(false);
+      setPhase(null);
     }
   };
 
@@ -175,7 +190,7 @@ function ExecutorStep({ scan, budget, onNext }: { scan: ScanResult | null; budge
     if (!target) return;
     if (existing) return connectLocal(existing.name);
     try {
-      await api.pullModel(target);
+      await startPull(target);
     } catch (e) {
       toast("error", errorText(e));
     }
@@ -232,13 +247,23 @@ function ExecutorStep({ scan, budget, onNext }: { scan: ScanResult | null; budge
                     }}>Change folder</button>
                   )}
                 </div>
+                {phase && (
+                  <div className="flex items-center gap-2 text-[12.5px] text-muted">
+                    <Spinner className="h-3.5 w-3.5" />
+                    <span className="flex-1">{phase} <span className="text-faint">{Math.round((Date.now() - phaseStart) / 1000)}s</span></span>
+                    {phase.startsWith("Loading") && (
+                      <Button size="sm" variant="ghost" onClick={() => { skipTest.current = true; setPhase(null); setBusy(false); setStatus({ ok: true, message: "Connected. The test was skipped; the model loads on the first run." }); }}>Skip test</Button>
+                    )}
+                  </div>
+                )}
+                {pull?.error && !pulling && <div className="text-[12px] text-warn">{pull.error}</div>}
                 {pulling && (
                   <div>
-                    <Progress value={pct(pull.completed, pull.total)} tone="local" />
+                    <Progress value={pull.total ? pct(pull.completed, pull.total) : 4} tone="local" className={pull.total ? "" : "animate-pulse-soft"} />
                     <div className="text-[11px] text-faint mt-1">{pull.status}{pull.total ? ` · ${bytes(pull.completed)} / ${bytes(pull.total)}` : ""}</div>
                   </div>
                 )}
-                {!status && <Button variant="primary" loading={busy || !!pulling} disabled={!ocInstalled || (!scan?.ollama.installed && !existing)} onClick={goLocal}>{existing ? "Connect & test" : "Download & connect"}</Button>}
+                {!status && !phase && <Button variant="primary" loading={busy || !!pulling} disabled={!ocInstalled || (!scan?.ollama.installed && !existing)} onClick={goLocal}>{existing ? "Connect & test" : "Download & connect"}</Button>}
               </>
             ) : (
               <div className="text-[12.5px] text-muted">No suggested model fits this Mac. Use a cheap cloud model instead.</div>

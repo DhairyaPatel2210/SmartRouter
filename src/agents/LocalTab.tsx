@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Check, Cpu, Download, FileUp, FolderOpen, HardDrive, Pause, Play, Plus, Power, Square, Trash2, X } from "lucide-react";
-import { useApp } from "../lib/store";
+import { startPull, useApp } from "../lib/store";
 import { api, errorText } from "../lib/api";
 import type { DetectedRuntime, HardwareCheck, LocalModel, OllamaStatus, Suggestion } from "../lib/types";
 import { Badge, Button, Card, Dialog, Input, Progress, SectionTitle, Spinner, Switch } from "../components/ui";
@@ -213,7 +213,7 @@ function SuggestionCard({ s, pull }: { s: Suggestion; pull?: { status: string; c
       <div className="text-[11.5px] text-faint mt-2">{gb(s.model.download_gb)} download · ~{gb(s.mem_gb)} RAM · {Math.round(s.ctx / 1024)}k context · {s.model.quant}</div>
       {active && (
         <div className="mt-3">
-          <Progress value={pct(pull.completed, pull.total)} tone="local" />
+          <Progress value={pull.total ? pct(pull.completed, pull.total) : 4} tone="local" className={pull.total ? "" : "animate-pulse-soft"} />
           <div className="flex items-center justify-between mt-1 text-[11px] text-faint">
             <span>{pull.status}{pull.total ? ` · ${bytes(pull.completed)} / ${bytes(pull.total)}` : ""}</span>
             <button className="flex items-center gap-1 hover:text-fg" onClick={() => api.cancelPull(s.model.id)}><Pause className="h-3 w-3" /> Pause</button>
@@ -226,13 +226,7 @@ function SuggestionCard({ s, pull }: { s: Suggestion; pull?: { status: string; c
           <Badge tone="ok"><Check className="h-3 w-3" /> downloaded</Badge>
         ) : (
           !active && (
-            <Button size="sm" variant={s.best ? "primary" : "secondary"} disabled={!s.disk_ok} title={s.disk_ok ? undefined : "Not enough disk space in the model folder"} onClick={async () => {
-              try {
-                await api.pullModel(s.model.id);
-              } catch (e) {
-                toast("error", errorText(e));
-              }
-            }}>
+            <Button size="sm" variant={s.best ? "primary" : "secondary"} disabled={!s.disk_ok} title={s.disk_ok ? undefined : "Not enough disk space in the model folder"} onClick={() => startPull(s.model.id)}>
               <Download className="h-3.5 w-3.5" /> {pull?.error ? "Resume" : "Download"}
             </Button>
           )
