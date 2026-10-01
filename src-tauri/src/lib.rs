@@ -270,6 +270,9 @@ pub fn run() {
             commands::outcome_stats,
             commands::install_cli_command,
             commands::set_window_visible,
+            commands::workflow_list,
+            commands::workflow_save,
+            commands::workflow_delete,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the app");

@@ -3,8 +3,58 @@ import { useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { markdown } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
+
+// A tiny markdown + YAML-frontmatter mode: headings, emphasis, code, lists,
+// links and frontmatter keys. Far smaller than the full markdown parser.
+interface MdState {
+  front: boolean;
+  frontDone: boolean;
+  fence: boolean;
+}
+const markdown = {
+  name: "markdown-lite",
+  startState: (): MdState => ({ front: false, frontDone: false, fence: false }),
+  token(stream: import("@codemirror/language").StringStream, st: MdState): string | null {
+    if (stream.sol()) {
+      if (stream.match(/^---\s*$/)) {
+        if (!st.frontDone && !st.front && stream.string === "---") {
+          st.front = true;
+          return "meta";
+        }
+        if (st.front) {
+          st.front = false;
+          st.frontDone = true;
+          return "meta";
+        }
+      }
+      if (stream.match(/^```/)) {
+        st.fence = !st.fence;
+        stream.skipToEnd();
+        return "meta";
+      }
+    }
+    if (st.fence) {
+      stream.skipToEnd();
+      return "monospace";
+    }
+    if (st.front) {
+      if (stream.sol() && stream.match(/^[\w.-]+(?=:)/)) return "propertyName";
+      if (stream.match(/^#.*/)) return "comment";
+      stream.next();
+      return "string";
+    }
+    st.frontDone = true;
+    if (stream.sol() && stream.match(/^#{1,6}\s.*/)) return "heading";
+    if (stream.sol() && stream.match(/^\s*([-*+]|\d+[.)])\s/)) return "list";
+    if (stream.match(/^`[^`]*`/)) return "monospace";
+    if (stream.match(/^\*\*[^*]+\*\*/)) return "strong";
+    if (stream.match(/^\[[^\]]*\]\([^)]*\)/)) return "link";
+    if (stream.match(/^<!--.*?-->/)) return "comment";
+    stream.next();
+    return null;
+  },
+};
 import { tags } from "@lezer/highlight";
 
 const theme = EditorView.theme({
@@ -27,6 +77,8 @@ const highlight = HighlightStyle.define([
   { tag: [tags.url, tags.link], color: "var(--cloud)" },
   { tag: [tags.meta, tags.processingInstruction, tags.comment], color: "var(--faint)" },
   { tag: tags.list, color: "var(--muted)" },
+  { tag: tags.propertyName, color: "var(--premium)" },
+  { tag: tags.string, color: "var(--fg)" },
 ]);
 
 export default function Editor({ value, onChange, onSave }: { value: string; onChange: (v: string) => void; onSave: () => void }) {
@@ -46,7 +98,7 @@ export default function Editor({ value, onChange, onSave }: { value: string; onC
           drawSelection(),
           highlightActiveLine(),
           EditorView.lineWrapping,
-          markdown(),
+          StreamLanguage.define(markdown),
           syntaxHighlighting(highlight),
           theme,
           keymap.of([

@@ -1206,3 +1206,46 @@ pub fn install_cli_command() -> Res<String> {
 pub fn set_window_visible(s: S, visible: bool) {
     s.core.window_visible.store(visible, std::sync::atomic::Ordering::SeqCst);
 }
+
+// ---------------------------------------------------------------- workflows (M5)
+
+fn workflows_dir(s: &S, workspace_id: &Option<String>) -> Res<PathBuf> {
+    match ws_path(s, workspace_id)? {
+        Some(w) => Ok(crate::handoff::dir(&w).join("workflows")),
+        None => Ok(s.core.data_dir.join("workflows")),
+    }
+}
+
+/// Workflows are JSON files in `.orchestrator/workflows/` (versioned with the workspace).
+#[tauri::command]
+pub fn workflow_list(s: S, workspace_id: Option<String>) -> Res<Vec<serde_json::Value>> {
+    let dir = workflows_dir(&s, &workspace_id)?;
+    let mut out = vec![];
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        for ent in rd.flatten() {
+            let p = ent.path();
+            if p.extension().is_some_and(|x| x == "json") {
+                if let Some(v) = std::fs::read(&p).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) {
+                    out.push(v);
+                }
+            }
+        }
+    }
+    out.sort_by_key(|v| v.get("display_name").and_then(|n| n.as_str()).unwrap_or("").to_lowercase());
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn workflow_save(s: S, workspace_id: Option<String>, workflow: serde_json::Value) -> Res<()> {
+    let id = workflow.get("id").and_then(|v| v.as_str()).map(library::slugify).ok_or("workflow needs an id")?;
+    let dir = workflows_dir(&s, &workspace_id)?;
+    std::fs::create_dir_all(&dir).map_err(e)?;
+    std::fs::write(dir.join(format!("{id}.json")), serde_json::to_vec_pretty(&workflow).map_err(e)?).map_err(e)
+}
+
+#[tauri::command]
+pub fn workflow_delete(s: S, workspace_id: Option<String>, id: String) -> Res<()> {
+    let dir = workflows_dir(&s, &workspace_id)?;
+    let _ = std::fs::remove_file(dir.join(format!("{}.json", library::slugify(&id))));
+    Ok(())
+}

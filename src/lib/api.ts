@@ -134,6 +134,9 @@ export const api = {
   metricsSince: (since: number) => call<T.MetricRow[]>("metrics_since", { since }),
   outcomeStats: (workspaceId?: string | null) => call<T.OutcomeStat[]>("outcome_stats", { workspaceId: workspaceId ?? null }),
   installCliCommand: () => call<string>("install_cli_command"),
+  workflowList: (workspaceId: string | null) => call<Record<string, unknown>[]>("workflow_list", { workspaceId }),
+  workflowSave: (workspaceId: string | null, workflow: Record<string, unknown>) => call<void>("workflow_save", { workspaceId, workflow }),
+  workflowDelete: (workspaceId: string | null, id: string) => call<void>("workflow_delete", { workspaceId, id }),
 };
 
 export function errorText(e: unknown): string {
@@ -141,3 +144,4 @@ export function errorText(e: unknown): string {
   if (e instanceof Error) return e.message;
   return JSON.stringify(e);
 }
+
