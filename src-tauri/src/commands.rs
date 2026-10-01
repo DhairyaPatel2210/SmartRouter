@@ -30,12 +30,13 @@ fn e<E: std::fmt::Display>(err: E) -> String {
 
 /// Errors and warnings from the UI (render crashes, failed calls) go to the app log.
 #[tauri::command]
-pub fn ui_log(level: String, message: String) {
+pub async fn ui_log(level: String, message: String) -> Res<()> {
     match level.as_str() {
         "error" => log::error!("ui: {message}"),
         "warn" => log::warn!("ui: {message}"),
         _ => log::info!("ui: {message}"),
     }
+    Ok(())
 }
 
 pub struct AppState {
@@ -63,7 +64,7 @@ pub struct Bootstrap {
 }
 
 #[tauri::command]
-pub fn bootstrap(s: S) -> Res<Bootstrap> {
+pub async fn bootstrap(s: S<'_>) -> Res<Bootstrap> {
     let c = &s.core;
     Ok(Bootstrap {
         brand: serde_json::json!({
@@ -83,23 +84,25 @@ pub fn bootstrap(s: S) -> Res<Bootstrap> {
 }
 
 #[tauri::command]
-pub fn take_pending_open(s: S) -> Option<String> {
-    // The UI calls this at the end of boot: the app is interactive.
-    if std::env::var("ORCH_PERF").is_ok() {
-        if let Some(t) = crate::STARTED.get() {
-            println!("ORCH_READY {}", t.elapsed().as_millis());
+pub async fn take_pending_open(s: S<'_>) -> Res<Option<String>> {
+    Ok({
+        // The UI calls this at the end of boot: the app is interactive.
+        if std::env::var("ORCH_PERF").is_ok() {
+            if let Some(t) = crate::STARTED.get() {
+                println!("ORCH_READY {}", t.elapsed().as_millis());
+            }
         }
-    }
-    s.pending_open.lock().take()
+        s.pending_open.lock().take()
+    })
 }
 
 #[tauri::command]
-pub fn get_settings(s: S) -> Settings {
-    s.core.db.settings()
+pub async fn get_settings(s: S<'_>) -> Res<Settings> {
+    Ok(s.core.db.settings())
 }
 
 #[tauri::command]
-pub fn save_settings(s: S, settings: Settings) -> Res<Settings> {
+pub async fn save_settings(s: S<'_>, settings: Settings) -> Res<Settings> {
     let mut settings = settings;
     settings.normalize();
     s.core.db.save_settings(&settings).map_err(e)?;
@@ -187,7 +190,9 @@ pub async fn open_workspace(s: S<'_>, path: String) -> Res<OpenedWorkspace> {
     if !p.is_dir() {
         return Err("That isn't a folder.".into());
     }
+    let t = std::time::Instant::now();
     let info = workspace::inspect(&p).await;
+    log::info!("opened {} in {} ms (git: {}, {} uncommitted)", p.display(), t.elapsed().as_millis(), info.is_git, info.dirty_count);
     let row = s.core.db.upsert_workspace(&p.to_string_lossy(), &workspace::display_name(&p), info.is_git).map_err(e)?;
     Ok(OpenedWorkspace { row, info })
 }
@@ -200,18 +205,18 @@ pub async fn inspect_workspace(s: S<'_>, id: String) -> Res<OpenedWorkspace> {
 }
 
 #[tauri::command]
-pub fn recent_workspaces(s: S) -> Res<Vec<WorkspaceRow>> {
+pub async fn recent_workspaces(s: S<'_>) -> Res<Vec<WorkspaceRow>> {
     s.core.db.recent_workspaces(10).map_err(e)
 }
 
 #[tauri::command]
-pub fn update_workspace(s: S, row: WorkspaceRow) -> Res<WorkspaceRow> {
+pub async fn update_workspace(s: S<'_>, row: WorkspaceRow) -> Res<WorkspaceRow> {
     s.core.db.update_workspace(&row).map_err(e)?;
     s.core.db.workspace(&row.id).map_err(e)?.ok_or_else(|| "workspace not found".into())
 }
 
 #[tauri::command]
-pub fn remove_workspace(s: S, id: String) -> Res<()> {
+pub async fn remove_workspace(s: S<'_>, id: String) -> Res<()> {
     s.core.db.remove_workspace(&id).map_err(e)
 }
 
@@ -256,17 +261,17 @@ pub async fn preflight(
 }
 
 #[tauri::command]
-pub fn start_run(s: S, opts: StartOpts) -> Res<String> {
+pub async fn start_run(s: S<'_>, opts: StartOpts) -> Res<String> {
     s.core.start_run(opts).map_err(e)
 }
 
 #[tauri::command]
-pub fn cancel_run(s: S, run_id: String) -> Res<()> {
+pub async fn cancel_run(s: S<'_>, run_id: String) -> Res<()> {
     s.core.cancel_run(&run_id).map_err(e)
 }
 
 #[tauri::command]
-pub fn pause_run(s: S, run_id: String, paused: bool) -> Res<()> {
+pub async fn pause_run(s: S<'_>, run_id: String, paused: bool) -> Res<()> {
     s.core.pause_run(&run_id, paused).map_err(e)
 }
 
@@ -276,18 +281,18 @@ pub async fn set_run_mode(s: S<'_>, run_id: String, mode: String) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn reassign_step(s: S, run_id: String, step_id: String, assignment: Assignment) -> Res<StepRow> {
+pub async fn reassign_step(s: S<'_>, run_id: String, step_id: String, assignment: Assignment) -> Res<StepRow> {
     s.core.reassign(&run_id, &step_id, assignment).map_err(e)
 }
 
 #[tauri::command]
-pub fn answer_approval(s: S, id: String, option: String) -> Res<()> {
+pub async fn answer_approval(s: S<'_>, id: String, option: String) -> Res<()> {
     s.core.answer(&id, &option).map_err(e)
 }
 
 #[tauri::command]
-pub fn pending_approvals(s: S) -> Vec<ApprovalRequest> {
-    s.core.pending_approvals()
+pub async fn pending_approvals(s: S<'_>) -> Res<Vec<ApprovalRequest>> {
+    Ok(s.core.pending_approvals())
 }
 
 #[derive(Serialize)]
@@ -300,7 +305,7 @@ pub struct RunDetail {
 }
 
 #[tauri::command]
-pub fn get_run(s: S, run_id: String) -> Res<RunDetail> {
+pub async fn get_run(s: S<'_>, run_id: String) -> Res<RunDetail> {
     let run = s.core.db.run(&run_id).map_err(e)?.ok_or("run not found")?;
     let ctl = s.core.run_ctl(&run_id);
     Ok(RunDetail {
@@ -313,13 +318,13 @@ pub fn get_run(s: S, run_id: String) -> Res<RunDetail> {
 }
 
 #[tauri::command]
-pub fn list_runs(s: S, workspace_id: Option<String>, since: Option<i64>, limit: Option<usize>) -> Res<Vec<RunRow>> {
+pub async fn list_runs(s: S<'_>, workspace_id: Option<String>, since: Option<i64>, limit: Option<usize>) -> Res<Vec<RunRow>> {
     s.core.db.runs(workspace_id.as_deref(), since, limit.unwrap_or(200)).map_err(e)
 }
 
 #[tauri::command]
-pub fn step_logs(s: S, run_id: String, step_id: String, step_idx: i64, after_seq: u64) -> Vec<LogLine> {
-    s.core.logs.get(&run_id, &step_id, step_idx, after_seq)
+pub async fn step_logs(s: S<'_>, run_id: String, step_id: String, step_idx: i64, after_seq: u64) -> Res<Vec<LogLine>> {
+    Ok(s.core.logs.get(&run_id, &step_id, step_idx, after_seq))
 }
 
 #[tauri::command]
@@ -334,7 +339,7 @@ pub async fn accept_run(s: S<'_>, run_id: String, merge: bool, restore_stash: bo
 
 /// Exports a run (with its Library snapshot hash and models) as JSON.
 #[tauri::command]
-pub fn export_run(s: S, run_id: String, path: String) -> Res<()> {
+pub async fn export_run(s: S<'_>, run_id: String, path: String) -> Res<()> {
     let run = s.core.db.run(&run_id).map_err(e)?.ok_or("run not found")?;
     let steps = s.core.db.steps(&run_id).map_err(e)?;
     let models: Vec<String> = steps
@@ -375,7 +380,7 @@ fn ws_path(s: &S, workspace_id: &Option<String>) -> Res<Option<PathBuf>> {
 }
 
 #[tauri::command]
-pub fn library_list(s: S, workspace_id: Option<String>) -> Res<LibraryView> {
+pub async fn library_list(s: S<'_>, workspace_id: Option<String>) -> Res<LibraryView> {
     let ws = ws_path(&s, &workspace_id)?;
     let items = library::list(&s.core.data_dir, ws.as_deref());
     let targets = s.core.sync_targets();
@@ -427,7 +432,7 @@ fn library_changed(s: &S, workspace_id: &Option<String>) {
 }
 
 #[tauri::command]
-pub fn library_create(s: S, kind: Kind, scope: Scope, display_name: String, workspace_id: Option<String>) -> Res<library::Item> {
+pub async fn library_create(s: S<'_>, kind: Kind, scope: Scope, display_name: String, workspace_id: Option<String>) -> Res<library::Item> {
     let ws = ws_path(&s, &workspace_id)?;
     let root = library::root_for(scope, &s.core.data_dir, ws.as_deref()).map_err(e)?;
     let item = library::create(&root, kind, scope, &display_name).map_err(e)?;
@@ -437,7 +442,7 @@ pub fn library_create(s: S, kind: Kind, scope: Scope, display_name: String, work
 
 /// Saves raw editor text; when the Library screen is open the workspace is re-synced.
 #[tauri::command]
-pub fn library_save(s: S, path: String, raw: String, workspace_id: Option<String>) -> Res<Option<sync::SyncReport>> {
+pub async fn library_save(s: S<'_>, path: String, raw: String, workspace_id: Option<String>) -> Res<Option<sync::SyncReport>> {
     let item = find_item(&s, &path, &workspace_id)?;
     library::save_raw(Path::new(&item.path), &raw).map_err(e)?;
     let report = match &workspace_id {
@@ -449,7 +454,7 @@ pub fn library_save(s: S, path: String, raw: String, workspace_id: Option<String
 }
 
 #[tauri::command]
-pub fn library_rename(s: S, path: String, display_name: String, workspace_id: Option<String>) -> Res<()> {
+pub async fn library_rename(s: S<'_>, path: String, display_name: String, workspace_id: Option<String>) -> Res<()> {
     let item = find_item(&s, &path, &workspace_id)?;
     library::rename(&item, &display_name).map_err(e)?;
     library_changed(&s, &workspace_id);
@@ -457,7 +462,7 @@ pub fn library_rename(s: S, path: String, display_name: String, workspace_id: Op
 }
 
 #[tauri::command]
-pub fn library_toggle(s: S, path: String, enabled: bool, workspace_id: Option<String>) -> Res<()> {
+pub async fn library_toggle(s: S<'_>, path: String, enabled: bool, workspace_id: Option<String>) -> Res<()> {
     let item = find_item(&s, &path, &workspace_id)?;
     library::set_enabled(&item, enabled).map_err(e)?;
     library_changed(&s, &workspace_id);
@@ -465,7 +470,7 @@ pub fn library_toggle(s: S, path: String, enabled: bool, workspace_id: Option<St
 }
 
 #[tauri::command]
-pub fn library_references(s: S, path: String, workspace_id: Option<String>) -> Res<Vec<String>> {
+pub async fn library_references(s: S<'_>, path: String, workspace_id: Option<String>) -> Res<Vec<String>> {
     let ws = ws_path(&s, &workspace_id)?;
     let items = library::list(&s.core.data_dir, ws.as_deref());
     let item = items.iter().find(|i| i.path == path).ok_or("item not found")?;
@@ -473,7 +478,7 @@ pub fn library_references(s: S, path: String, workspace_id: Option<String>) -> R
 }
 
 #[tauri::command]
-pub fn library_delete(s: S, path: String, workspace_id: Option<String>) -> Res<()> {
+pub async fn library_delete(s: S<'_>, path: String, workspace_id: Option<String>) -> Res<()> {
     let item = find_item(&s, &path, &workspace_id)?;
     library::delete(&item).map_err(e)?;
     library_changed(&s, &workspace_id);
@@ -481,7 +486,7 @@ pub fn library_delete(s: S, path: String, workspace_id: Option<String>) -> Res<(
 }
 
 #[tauri::command]
-pub fn library_duplicate(s: S, path: String, workspace_id: Option<String>) -> Res<String> {
+pub async fn library_duplicate(s: S<'_>, path: String, workspace_id: Option<String>) -> Res<String> {
     let item = find_item(&s, &path, &workspace_id)?;
     let root = Path::new(&item.path).ancestors().nth(if item.kind == Kind::Skill { 3 } else { 2 }).ok_or("bad path")?.to_path_buf();
     let p = library::copy_to(&item, &root, Some(&format!("{} copy", item.display_name))).map_err(e)?;
@@ -491,7 +496,7 @@ pub fn library_duplicate(s: S, path: String, workspace_id: Option<String>) -> Re
 
 /// Moves (or copies) an item between Global and Workspace scope.
 #[tauri::command]
-pub fn library_move(s: S, path: String, to: Scope, keep_original: bool, workspace_id: Option<String>) -> Res<String> {
+pub async fn library_move(s: S<'_>, path: String, to: Scope, keep_original: bool, workspace_id: Option<String>) -> Res<String> {
     let item = find_item(&s, &path, &workspace_id)?;
     let ws = ws_path(&s, &workspace_id)?;
     let root = library::root_for(to, &s.core.data_dir, ws.as_deref()).map_err(e)?;
@@ -512,7 +517,7 @@ pub struct Preview {
 }
 
 #[tauri::command]
-pub fn library_preview(s: S, path: String, workspace_id: Option<String>) -> Res<Vec<Preview>> {
+pub async fn library_preview(s: S<'_>, path: String, workspace_id: Option<String>) -> Res<Vec<Preview>> {
     let ws = ws_path(&s, &workspace_id)?;
     let items = library::list(&s.core.data_dir, ws.as_deref());
     let item = items.iter().find(|i| i.path == path).ok_or("item not found")?;
@@ -539,12 +544,12 @@ fn library_sync_inner(s: &S, workspace_id: &Option<String>) -> Res<sync::SyncRep
 }
 
 #[tauri::command]
-pub fn library_sync(s: S, workspace_id: Option<String>) -> Res<sync::SyncReport> {
+pub async fn library_sync(s: S<'_>, workspace_id: Option<String>) -> Res<sync::SyncReport> {
     library_sync_inner(&s, &workspace_id)
 }
 
 #[tauri::command]
-pub fn library_import(s: S, workspace_id: String, scope: Scope) -> Res<usize> {
+pub async fn library_import(s: S<'_>, workspace_id: String, scope: Scope) -> Res<usize> {
     let wid = Some(workspace_id);
     let ws = ws_path(&s, &wid)?.ok_or("workspace not found")?;
     let root = library::root_for(scope, &s.core.data_dir, Some(&ws)).map_err(e)?;
@@ -558,7 +563,7 @@ pub fn library_import(s: S, workspace_id: String, scope: Scope) -> Res<usize> {
 }
 
 #[tauri::command]
-pub fn library_import_edit(s: S, workspace_id: String, rel: String) -> Res<Option<String>> {
+pub async fn library_import_edit(s: S<'_>, workspace_id: String, rel: String) -> Res<Option<String>> {
     let wid = Some(workspace_id);
     let ws = ws_path(&s, &wid)?.ok_or("workspace not found")?;
     let items = library::list(&s.core.data_dir, Some(&ws));
@@ -568,14 +573,14 @@ pub fn library_import_edit(s: S, workspace_id: String, rel: String) -> Res<Optio
 }
 
 #[tauri::command]
-pub fn save_profile(s: S, id: Option<String>, display_name: String, item_ids: Vec<String>) -> Res<String> {
+pub async fn save_profile(s: S<'_>, id: Option<String>, display_name: String, item_ids: Vec<String>) -> Res<String> {
     let id = id.unwrap_or_else(|| library::slugify(&display_name));
     s.core.db.save_profile(&id, &display_name, &item_ids).map_err(e)?;
     Ok(id)
 }
 
 #[tauri::command]
-pub fn delete_profile(s: S, id: String) -> Res<()> {
+pub async fn delete_profile(s: S<'_>, id: String) -> Res<()> {
     s.core.db.delete_profile(&id).map_err(e)
 }
 
@@ -591,7 +596,7 @@ pub async fn agents(s: S<'_>, refresh: bool, auth: bool) -> Res<Vec<engine::Agen
 }
 
 #[tauri::command]
-pub fn agent_set(s: S, id: String, display_name: Option<String>, enabled: Option<bool>) -> Res<()> {
+pub async fn agent_set(s: S<'_>, id: String, display_name: Option<String>, enabled: Option<bool>) -> Res<()> {
     s.core.db.set_agent_meta(&id, display_name.as_deref(), enabled).map_err(e)?;
     s.core.bus.send(UiEvent::Agents);
     Ok(())
@@ -620,7 +625,7 @@ fn spawn_job(core: Arc<Core>, job_id: String, command: String, after: impl FnOnc
 
 /// Runs the catalog install command the user saw and confirmed.
 #[tauri::command]
-pub fn install_agent(s: S, id: String, option: usize) -> Res<String> {
+pub async fn install_agent(s: S<'_>, id: String, option: usize) -> Res<String> {
     let cat = s.core.catalog.agent(&id).ok_or("unknown agent")?;
     let opt = cat.install.get(os_key()).and_then(|o| o.get(option)).ok_or("no install option for this OS")?;
     spawn_job(s.core.clone(), id.clone(), opt.command.clone(), |core, _| {
@@ -633,7 +638,7 @@ pub fn install_agent(s: S, id: String, option: usize) -> Res<String> {
 }
 
 #[tauri::command]
-pub fn uninstall_agent(s: S, id: String) -> Res<String> {
+pub async fn uninstall_agent(s: S<'_>, id: String) -> Res<String> {
     let cat = s.core.catalog.agent(&id).ok_or("unknown agent")?;
     let cmd = cat.uninstall.get(os_key()).cloned().ok_or("no uninstall command for this OS")?;
     spawn_job(s.core.clone(), id, cmd.clone(), |core, _| {
@@ -646,7 +651,7 @@ pub fn uninstall_agent(s: S, id: String) -> Res<String> {
 }
 
 #[tauri::command]
-pub fn install_runtime(s: S, id: String, option: usize) -> Res<String> {
+pub async fn install_runtime(s: S<'_>, id: String, option: usize) -> Res<String> {
     let rt = s.core.catalog.runtimes.iter().find(|r| r.id == id).ok_or("unknown runtime")?;
     let opt = rt.install.get(os_key()).and_then(|o| o.get(option)).ok_or("no install option for this OS")?;
     spawn_job(s.core.clone(), id, opt.command.clone(), |core, _| core.bus.send(UiEvent::Agents));
@@ -654,7 +659,7 @@ pub fn install_runtime(s: S, id: String, option: usize) -> Res<String> {
 }
 
 #[tauri::command]
-pub fn cancel_job(s: S, id: String) -> Res<()> {
+pub async fn cancel_job(s: S<'_>, id: String) -> Res<()> {
     if let Some(c) = s.core.jobs.lock().get(&id) {
         c.cancel();
     }
@@ -663,7 +668,7 @@ pub fn cancel_job(s: S, id: String) -> Res<()> {
 
 /// Opens the CLI's own login flow in Terminal (the app never stores paid-agent credentials).
 #[tauri::command]
-pub fn open_login(s: S, id: String) -> Res<()> {
+pub async fn open_login(s: S<'_>, id: String) -> Res<()> {
     let a = s.core.adapter(&id).ok_or("unknown agent")?;
     let cmd = a.login_command().ok_or("this agent has no login step")?;
     open_in_terminal(&cmd)
@@ -733,8 +738,8 @@ pub async fn local_models(s: S<'_>) -> Res<Vec<LocalModel>> {
 }
 
 #[tauri::command]
-pub fn hardware_check(s: S) -> HardwareCheck {
-    installer::hardware_check(&s.core.db.settings())
+pub async fn hardware_check(s: S<'_>) -> Res<HardwareCheck> {
+    Ok(installer::hardware_check(&s.core.db.settings()))
 }
 
 #[tauri::command]
@@ -778,15 +783,36 @@ pub async fn pull_model(s: S<'_>, name: String) -> Res<()> {
     tauri::async_runtime::spawn(async move {
         let settings = core.db.settings();
         if core.ollama.client().version().await.is_none() {
-            core.bus.send(UiEvent::Pull { model: name.clone(), status: "Starting Ollama…".into(), completed: 0, total: 0, done: None, error: None });
+            core.bus.send(UiEvent::Pull {
+                model: name.clone(),
+                status: "Starting Ollama…".into(),
+                completed: 0,
+                total: 0,
+                done: None,
+                error: None,
+            });
         }
         if let Err(err) = core.ollama.ensure_running(&settings, &core.registry, crate::macos::hardware().total_mem_gb).await {
             core.pulls.lock().remove(&name);
             log::warn!("pull {name}: {err:#}");
-            core.bus.send(UiEvent::Pull { model: name, status: "stopped".into(), completed: 0, total: 0, done: Some(false), error: Some(format!("{err:#}")) });
+            core.bus.send(UiEvent::Pull {
+                model: name,
+                status: "stopped".into(),
+                completed: 0,
+                total: 0,
+                done: Some(false),
+                error: Some(format!("{err:#}")),
+            });
             return;
         }
-        core.bus.send(UiEvent::Pull { model: name.clone(), status: "Connecting to the model registry…".into(), completed: 0, total: 0, done: None, error: None });
+        core.bus.send(UiEvent::Pull {
+            model: name.clone(),
+            status: "Connecting to the model registry…".into(),
+            completed: 0,
+            total: 0,
+            done: None,
+            error: None,
+        });
         let client = core.ollama.client();
         let c2 = core.clone();
         let mut last = std::time::Instant::now() - std::time::Duration::from_secs(1);
@@ -807,7 +833,13 @@ pub async fn pull_model(s: S<'_>, name: String) -> Res<()> {
             })
             .await;
         core.pulls.lock().remove(&name);
-        log::info!("pull {name}: {}", match &r { Ok(()) => "done".to_string(), Err(e) => format!("{e:#}") });
+        log::info!(
+            "pull {name}: {}",
+            match &r {
+                Ok(()) => "done".to_string(),
+                Err(e) => format!("{e:#}"),
+            }
+        );
         let (done, error) = match r {
             Ok(()) => (Some(true), None),
             Err(err) if cancel.is_cancelled() => (Some(false), Some(format!("Paused: {err}"))),
@@ -826,7 +858,7 @@ pub async fn pull_model(s: S<'_>, name: String) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn cancel_pull(s: S, name: String) -> Res<()> {
+pub async fn cancel_pull(s: S<'_>, name: String) -> Res<()> {
     if let Some(c) = s.core.pulls.lock().get(&name) {
         c.cancel();
     }
@@ -928,7 +960,7 @@ pub struct ProviderView {
 }
 
 #[tauri::command]
-pub fn providers_list(s: S) -> Res<Vec<ProviderView>> {
+pub async fn providers_list(s: S<'_>) -> Res<Vec<ProviderView>> {
     Ok(s.core
         .db
         .providers()
@@ -991,13 +1023,13 @@ pub async fn provider_models(s: S<'_>, id: String) -> Res<Vec<CloudModel>> {
 }
 
 #[tauri::command]
-pub fn update_provider(s: S, row: ProviderRow) -> Res<()> {
+pub async fn update_provider(s: S<'_>, row: ProviderRow) -> Res<()> {
     s.core.db.save_provider(&row).map_err(e)
 }
 
 /// Removes the provider, its Keychain entry and its executor-pool entries.
 #[tauri::command]
-pub fn disconnect_provider(s: S, id: String) -> Res<()> {
+pub async fn disconnect_provider(s: S<'_>, id: String) -> Res<()> {
     if let Some(p) = s.core.db.providers().map_err(e)?.into_iter().find(|p| p.id == id) {
         if let Some(k) = &p.key_ref {
             keychain::delete(k).map_err(e)?;
@@ -1177,13 +1209,13 @@ pub async fn smoke_test(s: S<'_>, entry: ExecutorEntry) -> Res<SmokeResult> {
 }
 
 #[tauri::command]
-pub fn models_list(s: S) -> Res<Vec<ModelRow>> {
+pub async fn models_list(s: S<'_>) -> Res<Vec<ModelRow>> {
     s.core.db.models().map_err(e)
 }
 
 /// Renames a model or edits its prices everywhere it's used.
 #[tauri::command]
-pub fn update_model(s: S, row: ModelRow) -> Res<Settings> {
+pub async fn update_model(s: S<'_>, row: ModelRow) -> Res<Settings> {
     s.core.db.save_model(&row).map_err(e)?;
     let mut st = s.core.db.settings();
     let fix = |m: &mut ModelRef| {
@@ -1281,18 +1313,18 @@ pub async fn why_slow(s: S<'_>) -> Res<WhySlow> {
 }
 
 #[tauri::command]
-pub fn metrics_since(s: S, since: i64) -> Res<Vec<crate::db::queries::MetricRow>> {
+pub async fn metrics_since(s: S<'_>, since: i64) -> Res<Vec<crate::db::queries::MetricRow>> {
     s.core.db.metrics_since(since).map_err(e)
 }
 
 #[tauri::command]
-pub fn outcome_stats(s: S, workspace_id: Option<String>) -> Res<Vec<crate::db::queries::OutcomeStat>> {
+pub async fn outcome_stats(s: S<'_>, workspace_id: Option<String>) -> Res<Vec<crate::db::queries::OutcomeStat>> {
     s.core.db.outcome_stats(workspace_id.as_deref()).map_err(e)
 }
 
 /// Installs the `orch <path>` shell command into ~/.local/bin.
 #[tauri::command]
-pub fn install_cli_command() -> Res<String> {
+pub async fn install_cli_command() -> Res<String> {
     let exe = std::env::current_exe().map_err(e)?;
     let dir = dirs::home_dir().ok_or("no home dir")?.join(".local/bin");
     std::fs::create_dir_all(&dir).map_err(e)?;
@@ -1312,8 +1344,9 @@ pub fn install_cli_command() -> Res<String> {
 }
 
 #[tauri::command]
-pub fn set_window_visible(s: S, visible: bool) {
+pub async fn set_window_visible(s: S<'_>, visible: bool) -> Res<()> {
     s.core.window_visible.store(visible, std::sync::atomic::Ordering::SeqCst);
+    Ok(())
 }
 
 // ---------------------------------------------------------------- workflows (M5)
@@ -1327,7 +1360,7 @@ fn workflows_dir(s: &S, workspace_id: &Option<String>) -> Res<PathBuf> {
 
 /// Workflows are JSON files in `.orchestrator/workflows/` (versioned with the workspace).
 #[tauri::command]
-pub fn workflow_list(s: S, workspace_id: Option<String>) -> Res<Vec<serde_json::Value>> {
+pub async fn workflow_list(s: S<'_>, workspace_id: Option<String>) -> Res<Vec<serde_json::Value>> {
     let dir = workflows_dir(&s, &workspace_id)?;
     let mut out = vec![];
     if let Ok(rd) = std::fs::read_dir(&dir) {
@@ -1345,7 +1378,7 @@ pub fn workflow_list(s: S, workspace_id: Option<String>) -> Res<Vec<serde_json::
 }
 
 #[tauri::command]
-pub fn workflow_save(s: S, workspace_id: Option<String>, workflow: serde_json::Value) -> Res<()> {
+pub async fn workflow_save(s: S<'_>, workspace_id: Option<String>, workflow: serde_json::Value) -> Res<()> {
     let id = workflow.get("id").and_then(|v| v.as_str()).map(library::slugify).ok_or("workflow needs an id")?;
     let dir = workflows_dir(&s, &workspace_id)?;
     std::fs::create_dir_all(&dir).map_err(e)?;
@@ -1353,7 +1386,7 @@ pub fn workflow_save(s: S, workspace_id: Option<String>, workflow: serde_json::V
 }
 
 #[tauri::command]
-pub fn workflow_delete(s: S, workspace_id: Option<String>, id: String) -> Res<()> {
+pub async fn workflow_delete(s: S<'_>, workspace_id: Option<String>, id: String) -> Res<()> {
     let dir = workflows_dir(&s, &workspace_id)?;
     let _ = std::fs::remove_file(dir.join(format!("{}.json", library::slugify(&id))));
     Ok(())

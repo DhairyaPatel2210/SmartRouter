@@ -142,6 +142,13 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let notify_handle = handle.clone();
+            // Resolve the login-shell PATH now, off the main thread, so the first
+            // folder open or agent check doesn't wait for it.
+            std::thread::spawn(|| {
+                let t = std::time::Instant::now();
+                let _ = proc::path_env();
+                log::debug!("PATH resolved in {} ms", t.elapsed().as_millis());
+            });
             let log_path = logging::init(&data_dir());
             log::info!(
                 "{} {} starting · data {} · log {}",
