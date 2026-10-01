@@ -102,6 +102,14 @@ impl Bus {
     }
 
     pub fn send(&self, e: UiEvent) {
+        if let UiEvent::Notice { level, text, run_id } = &e {
+            let run = run_id.as_deref().map(|r| format!("run {} · ", &r[..8.min(r.len())])).unwrap_or_default();
+            match level.as_str() {
+                "error" => log::error!("{run}{text}"),
+                "warn" | "pressure_warning" | "pressure_critical" => log::warn!("{run}{text}"),
+                _ => log::info!("{run}{text}"),
+            }
+        }
         let first = {
             let mut b = self.buf.lock();
             b.push(e);

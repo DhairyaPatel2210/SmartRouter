@@ -299,3 +299,20 @@ async fn approve_before_paid_pauses_for_the_user() {
     // planning + step 2 [high] + review
     assert_eq!(asked.load(Ordering::SeqCst), 3);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failed_planning_restores_branch_and_stash() {
+    let env = setup("always-fail:1,steps:1", true, vec![], "balanced").await;
+    // Uncommitted work on a feature branch, like a real user.
+    sh(&env.ws, "git switch -q -c feature && echo wip >> README.md && echo new > notes.txt").await;
+    // No executor pool and a failing paid agent: step 1 fails everywhere and the user stops.
+    let id = start(&env, "Do the thing");
+    let (run, _) = wait(&env, &id, |_| "stop").await;
+    assert_ne!(run.status, "succeeded");
+    assert_eq!(sh(&env.ws, "git rev-parse --abbrev-ref HEAD").await, "feature");
+    assert!(std::fs::read_to_string(env.ws.join("README.md")).unwrap().contains("wip"));
+    assert!(env.ws.join("notes.txt").exists());
+    assert_eq!(sh(&env.ws, "git stash list").await, "");
+    assert_eq!(sh(&env.ws, "git branch --list 'orchestrator/*'").await, "");
+    assert_eq!(run.summary["restored"], true);
+}

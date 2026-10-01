@@ -85,6 +85,8 @@
       }
       if (cmd.startsWith("plugin:")) return null;
       if (cmd === "save_settings") return args.settings;
+      const o = window.__mockOverrides || {};
+      if (cmd in o) return structuredClone(typeof o[cmd] === "function" ? o[cmd](args) : o[cmd]);
       return cmd in responses ? structuredClone(responses[cmd]) : null;
     },
   };

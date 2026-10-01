@@ -20,7 +20,10 @@ impl CliSpec for Claude {
         "claude".into()
     }
     fn build(&self, req: &StepRequest, cmd: &mut Command) -> Result<()> {
-        cmd.args(["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]);
+        // The prompt must follow -p directly: --allowedTools is variadic and
+        // would swallow a trailing prompt (verified with claude 2.1.278).
+        cmd.arg("-p").arg(&req.prompt);
+        cmd.args(["--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits"]);
         // Edits are auto-accepted; tools are limited to the workspace (Claude
         // Code confines file access to the cwd unless --add-dir is given).
         cmd.args(["--allowedTools", "Read Edit Write MultiEdit Glob Grep Bash TodoWrite"]);
@@ -35,7 +38,6 @@ impl CliSpec for Claude {
         if let Some(k) = &req.api_key {
             cmd.env("ANTHROPIC_API_KEY", k);
         }
-        cmd.arg(&req.prompt);
         Ok(())
     }
     fn parse(&self, stream: Stream, line: &str, st: &mut ParseState, emit: &dyn Fn(AgentEvent)) {
@@ -155,6 +157,38 @@ impl AgentAdapter for Claude {
 mod tests {
     use super::*;
     use crate::adapters::testutil::*;
+
+    #[test]
+    fn prompt_directly_follows_print_flag() {
+        let c = Claude::new(AdapterCtx { registry: Default::default(), data_dir: "/tmp".into(), demo_agents: false });
+        let mut cmd = Command::new("claude");
+        let req = StepRequest {
+            run_id: "r".into(),
+            step_id: "s".into(),
+            workspace: "/tmp".into(),
+            task_file: "/tmp/t.md".into(),
+            prompt: "PROMPT".into(),
+            model: None,
+            library_agent: Some("test-writer".into()),
+            timeout: Duration::from_secs(1),
+            low_priority: false,
+            api_key: None,
+            cancel: Default::default(),
+        };
+        c.build(&req, &mut cmd).unwrap();
+        let args: Vec<String> = cmd.as_std().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(&args[..2], &["-p", "PROMPT"]);
+        assert_eq!(args.iter().filter(|a| *a == "PROMPT").count(), 1);
+    }
+
+    #[test]
+    fn parses_real_not_logged_in_result() {
+        // Recorded from claude 2.1.278 (`--bare`, no key): an error result must fail the step.
+        let c = Claude::new(AdapterCtx { registry: Default::default(), data_dir: "/tmp".into(), demo_agents: false });
+        let (_, st) = parse_fixture(&c, &fixture("claude", "not-logged-in.jsonl"));
+        assert!(st.failed);
+        assert_eq!(st.reported_error.as_deref(), Some("Not logged in · Please run /login"));
+    }
 
     #[test]
     fn parses_stream_json_fixture() {

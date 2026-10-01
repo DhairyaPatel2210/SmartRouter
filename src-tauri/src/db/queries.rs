@@ -6,6 +6,23 @@ use anyhow::Result;
 use rusqlite::{params, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
+/// Parses a JSON column that must be an object (`null`/invalid → `{}`).
+fn obj(s: &str) -> serde_json::Value {
+    match serde_json::from_str::<serde_json::Value>(s) {
+        Ok(v @ serde_json::Value::Object(_)) => v,
+        _ => serde_json::json!({}),
+    }
+}
+
+/// Serializes a JSON object field, sending `{}` instead of `null` so the UI
+/// can always read properties from it.
+fn ser_obj<S: serde::Serializer>(v: &serde_json::Value, s: S) -> Result<S::Ok, S::Error> {
+    match v {
+        serde_json::Value::Object(_) => v.serialize(s),
+        _ => serde_json::Map::new().serialize(s),
+    }
+}
+
 // ---------- settings ----------
 
 impl Db {
@@ -141,6 +158,7 @@ pub struct RunRow {
     pub budget_planning: bool,
     pub branch: Option<String>,
     pub base_ref: Option<String>,
+    #[serde(serialize_with = "ser_obj", default)]
     pub summary: serde_json::Value,
 }
 
@@ -160,7 +178,7 @@ fn run_row(r: &Row) -> rusqlite::Result<RunRow> {
         budget_planning: r.get(10)?,
         branch: r.get(11)?,
         base_ref: r.get(12)?,
-        summary: serde_json::from_str(&s).unwrap_or_default(),
+        summary: obj(&s),
     })
 }
 
@@ -191,6 +209,7 @@ pub struct StepRow {
     pub commit_ref: Option<String>,
     pub started_at: Option<i64>,
     pub ended_at: Option<i64>,
+    #[serde(serialize_with = "ser_obj", default)]
     pub detail: serde_json::Value,
 }
 
@@ -219,7 +238,7 @@ fn step_row(r: &Row) -> rusqlite::Result<StepRow> {
         commit_ref: r.get(19)?,
         started_at: r.get(20)?,
         ended_at: r.get(21)?,
-        detail: serde_json::from_str(&d).unwrap_or_default(),
+        detail: obj(&d),
     })
 }
 
@@ -233,7 +252,7 @@ impl Db {
     }
 
     pub fn save_run(&self, r: &RunRow) -> Result<()> {
-        let s = serde_json::to_string(&r.summary)?;
+        let s = if r.summary.is_object() { serde_json::to_string(&r.summary)? } else { "{}".to_string() };
         self.with(|c| {
             c.execute(
                 &format!("INSERT OR REPLACE INTO runs ({RUN_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)"),
@@ -289,7 +308,7 @@ impl Db {
     }
 
     pub fn save_step(&self, s: &StepRow) -> Result<()> {
-        let d = serde_json::to_string(&s.detail)?;
+        let d = if s.detail.is_object() { serde_json::to_string(&s.detail)? } else { "{}".to_string() };
         self.with(|c| {
             c.execute(
                 &format!(
@@ -488,6 +507,10 @@ mod tests {
         };
         db.save_step(&step).unwrap();
         assert_eq!(db.steps("r").unwrap().len(), 1);
+        // Default (null) JSON fields come back and serialize as objects.
+        assert!(db.run("r").unwrap().unwrap().summary.is_object());
+        assert_eq!(serde_json::to_value(&step).unwrap()["detail"], serde_json::json!({}));
+        assert_eq!(serde_json::to_value(&run).unwrap()["summary"], serde_json::json!({}));
         assert_eq!(db.fail_orphan_runs().unwrap(), 1);
         assert_eq!(db.steps("r").unwrap()[0].status, "cancelled");
     }

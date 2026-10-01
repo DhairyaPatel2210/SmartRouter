@@ -7,6 +7,7 @@ pub mod governor;
 pub mod handoff;
 pub mod installer;
 pub mod library;
+pub mod logging;
 pub mod macos;
 pub mod proc;
 pub mod providers;
@@ -141,6 +142,14 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let notify_handle = handle.clone();
+            let log_path = logging::init(&data_dir());
+            log::info!(
+                "{} {} starting · data {} · log {}",
+                brand::PRODUCT_NAME,
+                env!("CARGO_PKG_VERSION"),
+                data_dir().display(),
+                log_path.display()
+            );
             let core = Core::new(CoreDeps {
                 data_dir: data_dir(),
                 catalog_dir: catalog_dir(&handle),
@@ -170,7 +179,14 @@ pub fn run() {
             // Detect agents after the window is up (PATH lookup + `--version` calls).
             let dc = core.clone();
             tauri::async_runtime::spawn(async move {
-                dc.refresh_agents(true).await;
+                let found: Vec<String> = dc
+                    .refresh_agents(true)
+                    .await
+                    .into_iter()
+                    .filter(|a| a.installed)
+                    .map(|a| format!("{} {}", a.id, a.version.unwrap_or_default()))
+                    .collect();
+                log::info!("agents detected: {}", if found.is_empty() { "none".to_string() } else { found.join(", ") });
                 dc.bus.send(UiEvent::Agents);
             });
             Ok(())
@@ -277,6 +293,7 @@ pub fn run() {
             commands::workflow_list,
             commands::workflow_save,
             commands::workflow_delete,
+            commands::ui_log,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the app");

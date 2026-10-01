@@ -44,6 +44,14 @@ pub async fn dirty_files(ws: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Pops the stash entry whose message ends with `message` (not just the top one).
+pub async fn pop_stash_with_message(ws: &Path, message: &str) -> Result<()> {
+    let list = git(ws, &["stash", "list"]).await?;
+    let Some(idx) = list.lines().position(|l| l.ends_with(message)) else { bail!("stash \"{message}\" not found") };
+    git(ws, &["stash", "pop", &format!("stash@{{{idx}}}")]).await?;
+    Ok(())
+}
+
 pub async fn stash(ws: &Path, message: &str) -> Result<()> {
     git(ws, &["stash", "push", "--include-untracked", "-m", message]).await?;
     Ok(())

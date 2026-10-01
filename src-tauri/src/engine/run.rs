@@ -68,6 +68,7 @@ pub async fn execute(core: Arc<Core>, ctl: Arc<RunCtl>, opts: StartOpts) {
         }
     };
     core.sampler.acquire();
+    log::info!("run {} started in {} (mode {})", short(&ctl.run_id), ctl.ws.display(), ctl.mode());
     let result = run_inner(&core, &ctl, &opts).await;
     core.sampler.release();
     drop(permit);
@@ -95,9 +96,13 @@ pub async fn execute(core: Arc<Core>, ctl: Arc<RunCtl>, opts: StartOpts) {
     }
     let steps = core.db.steps(&ctl.run_id).unwrap_or_default();
     summarize(&mut run, &steps);
+    log::info!("run {} finished: {status} ({:?})", short(&ctl.run_id), result.as_ref().err().map(|e| format!("{e:#}")));
     run.status = status.to_string();
     run.ended_at = Some(now_ms());
     run.peak_mem_mb = run.peak_mem_mb.max(*ctl.peak_mb.lock());
+    if status != RunStatus::Succeeded {
+        restore_if_untouched(&core, &ctl, &mut run, &steps).await;
+    }
     run.est_cost_usd = steps.iter().map(|s| s.cost_usd).sum();
     let _ = core.db.save_run(&run);
     core.db.flush();
@@ -120,6 +125,48 @@ pub async fn execute(core: Arc<Core>, ctl: Arc<RunCtl>, opts: StartOpts) {
     let passed = run.summary.get("steps_passed").and_then(|v| v.as_u64()).unwrap_or(0);
     let total = run.summary.get("steps_total").and_then(|v| v.as_u64()).unwrap_or(0);
     core.notify(&format!("Run {}", status), &format!("{passed}/{total} steps passed · est. ${:.2} (saved ${saved:.2})", run.est_cost_usd));
+}
+
+/// A run that ends before any step lands leaves the repo exactly as it was:
+/// back on the original branch, the empty run branch deleted and the
+/// stashed changes restored. (Skipped when the user chose "run on top",
+/// because their uncommitted changes are in the working tree.)
+async fn restore_if_untouched(core: &Core, ctl: &RunCtl, run: &mut RunRow, steps: &[StepRow]) {
+    let landed = steps.iter().any(|s| s.kind == "execute" && matches!(s.status.as_str(), "passed" | "accepted"));
+    let (Some(branch), Some(base)) = (run.branch.clone(), run.base_ref.clone()) else { return };
+    if landed || run.summary.get("ran_on_top").is_some() {
+        return;
+    }
+    let ws = &ctl.ws;
+    if git::current_branch(ws).await.as_deref() != Some(branch.as_str()) {
+        return;
+    }
+    let restore = async {
+        git::discard_changes(ws).await?;
+        git::switch(ws, &base).await?;
+        let _ = crate::proc::output("git", &["branch", "-D", &branch], Some(ws), Duration::from_secs(20)).await;
+        if let Some(msg) = run.summary.get("stashed").and_then(|v| v.as_str()).map(String::from) {
+            git::pop_stash_with_message(ws, &msg).await?;
+        }
+        anyhow::Ok(())
+    };
+    match restore.await {
+        Ok(()) => {
+            let stashed = run.summary.as_object_mut().and_then(|o| o.remove("stashed")).is_some();
+            run.summary["restored"] = true.into();
+            run.branch = None;
+            core.bus.notice(
+                "info",
+                format!("Nothing was changed, so {} is back on {base}{}.", workspace::display_name(ws), if stashed { " with your uncommitted changes restored" } else { "" }),
+                Some(&ctl.run_id),
+            );
+        }
+        Err(e) => core.bus.notice(
+            "warn",
+            format!("Couldn't restore the workspace automatically ({e:#}). Your changes are safe in `git stash list`; run `git switch {base} && git stash pop`."),
+            Some(&ctl.run_id),
+        ),
+    }
 }
 
 fn finish_cancelled_early(core: &Core, ctl: &RunCtl) {
@@ -170,12 +217,20 @@ fn save_run(core: &Core, r: &RunRow) {
 
 /// Writes a line to a step's log (memory ring + file) and streams it to the UI.
 fn log(core: &Core, run_id: &str, step_id: &str, kind: &str, text: &str) {
+    match kind {
+        "out" | "check" | "tool" | "edit" => log::debug!("run {} [{kind}] {text}", short(run_id)),
+        "error" => log::warn!("run {} [{kind}] {text}", short(run_id)),
+        _ => log::info!("run {} [{kind}] {text}", short(run_id)),
+    }
     let line = core.logs.push(step_id, kind, text);
     core.bus.send(UiEvent::Log { run_id: run_id.into(), step_id: step_id.into(), line });
 }
 
 /// A governor/route/check event: logged and stored as a normalized event.
 fn event(core: &Core, run_id: &str, step_id: &str, kind: &str, text: &str) {
+    if matches!(kind, "check" | "tool") {
+        log::info!("run {} [{kind}] {text}", short(run_id));
+    }
     log(core, run_id, step_id, kind, text);
     core.db.writer().event(run_id, Some(step_id), kind, serde_json::json!({ "text": text }).to_string());
 }
@@ -255,7 +310,9 @@ async fn run_inner(core: &Arc<Core>, ctl: &Arc<RunCtl>, opts: &StartOpts) -> Res
                 DirtyStrategy::Commit => {
                     git::commit_all(&ws, &format!("WIP: save work before {} run", brand::SHORT_NAME)).await?;
                 }
-                DirtyStrategy::RunOnTop => {}
+                DirtyStrategy::RunOnTop => {
+                    run.summary["ran_on_top"] = true.into();
+                }
             }
         }
         run.base_ref = git::current_branch(&ws).await;
@@ -1434,8 +1491,8 @@ pub async fn accept(core: &Arc<Core>, run_id: &str, merge: bool, restore_stash: 
             if !merge {
                 git::switch(&ws_path, &base).await?;
             }
-            let r = crate::proc::output("git", &["stash", "pop"], Some(&ws_path), Duration::from_secs(30)).await?;
-            if r.0 == 0 {
+            let stash_msg = run.summary.get("stashed").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+            if git::pop_stash_with_message(&ws_path, &stash_msg).await.is_ok() {
                 msg.push("Restored your stashed changes.".into());
                 run.summary.as_object_mut().map(|o| o.remove("stashed"));
             } else {

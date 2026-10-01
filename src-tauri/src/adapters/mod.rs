@@ -178,6 +178,15 @@ pub async fn run_cli(spec: &dyn CliSpec, registry: &ProcRegistry, label: &str, r
     spec.build(&req, &mut cmd)?;
     let mut st = ParseState::default();
     let emit = |e: AgentEvent| tx(e);
+    // Log the command without the prompt (long) and never any env (keys).
+    let args: Vec<String> = cmd
+        .as_std()
+        .get_args()
+        .map(|a| a.to_string_lossy().into_owned())
+        .map(|a| if a == req.prompt { format!("<prompt {} chars>", a.len()) } else { a })
+        .collect();
+    log::info!("spawn {} {} (cwd {})", bin.display(), args.join(" "), req.workspace.display());
+    let started = std::time::Instant::now();
     let exit =
         proc::run_streaming(cmd, RunOpts { registry, owner: &req.step_id, label, timeout: req.timeout, cancel: &req.cancel }, |s, line| {
             let line = strip_ansi(line);
@@ -187,6 +196,11 @@ pub async fn run_cli(spec: &dyn CliSpec, registry: &ProcRegistry, label: &str, r
             spec.parse(s, &line, &mut st, &emit);
         })
         .await?;
+    log::info!(
+        "{label} exited: {exit:?} after {:.1}s{}",
+        started.elapsed().as_secs_f64(),
+        st.reported_error.as_deref().map(|e| format!(" · error: {e}")).unwrap_or_default()
+    );
     Ok(outcome_from(exit, st))
 }
 

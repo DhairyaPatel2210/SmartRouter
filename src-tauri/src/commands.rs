@@ -21,8 +21,21 @@ use tauri::State;
 
 pub type Res<T> = Result<T, String>;
 
+/// Converts an error for the UI and logs it (so failures show in the terminal and app.log).
 fn e<E: std::fmt::Display>(err: E) -> String {
-    format!("{err:#}")
+    let s = format!("{err:#}");
+    log::warn!("command error: {s}");
+    s
+}
+
+/// Errors and warnings from the UI (render crashes, failed calls) go to the app log.
+#[tauri::command]
+pub fn ui_log(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!("ui: {message}"),
+        "warn" => log::warn!("ui: {message}"),
+        _ => log::info!("ui: {message}"),
+    }
 }
 
 pub struct AppState {
