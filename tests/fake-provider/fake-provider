@@ -1,0 +1,10 @@
+#!/bin/sh
+# Local HTTP server imitating an OpenAI-compatible API (/v1/models,
+# /v1/chat/completions with streaming and tool calls). Used to record
+# adapter fixtures without calling a real cloud model.
+#   tests/fake-provider/fake-provider 18777
+# Logic: src-tauri/src/providers/fake.rs. Accepts any key except "bad".
+DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+BIN="${ORCH_BIN:-$DIR/src-tauri/target/debug/orchestrator}"
+[ -x "$BIN" ] || { echo "build first: cargo build --manifest-path src-tauri/Cargo.toml" >&2; exit 2; }
+exec "$BIN" --fake-provider "${1:-18777}"

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Scripted fake coding agent for integration tests and fixture work.
+# The logic lives in the app binary (`orchestrator --fake-agent`); see
+# src-tauri/src/adapters/fake_cli.rs for scenarios (FAKE_AGENT_SCENARIO or
+# <workspace>/.orchestrator/fake-scenario).
+DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+BIN="${ORCH_FAKE_AGENT_BIN:-$DIR/src-tauri/target/debug/orchestrator}"
+[ -x "$BIN" ] || { echo "build first: cargo build --manifest-path src-tauri/Cargo.toml" >&2; exit 2; }
+exec "$BIN" --fake-agent "$@"
