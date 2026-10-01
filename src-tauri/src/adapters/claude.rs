@@ -171,6 +171,7 @@ mod tests {
             model: None,
             library_agent: Some("test-writer".into()),
             timeout: Duration::from_secs(1),
+            stall_timeout: Duration::from_secs(300),
             low_priority: false,
             api_key: None,
             cancel: Default::default(),

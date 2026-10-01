@@ -76,7 +76,8 @@ pub fn suggestions(cat: &Catalog, check: &HardwareCheck, installed: &[String]) -
     let best = out
         .iter()
         .enumerate()
-        .filter(|(_, s)| s.fit == Fit::Fits && s.model.tool_calling)
+        // Only recommend models that can actually drive a coding agent.
+        .filter(|(_, s)| s.fit == Fit::Fits && s.model.tool_calling && s.model.agentic != Some(false))
         .max_by(|a, b| (a.1.installed, a.1.model.params_b as i64).cmp(&(b.1.installed, b.1.model.params_b as i64)))
         .map(|(i, _)| i);
     if let Some(i) = best {
@@ -244,8 +245,11 @@ mod tests {
             free_disk_gb: Some(100.0),
         };
         let s8 = suggestions(&cat, &mk(8.0), &[]);
-        let best8 = s8.iter().find(|s| s.best).unwrap();
-        assert_eq!(best8.model.id, "qwen2.5-coder:3b");
+        // Nothing that fits an 8 GB Mac can drive a coding agent: no local recommendation.
+        assert!(s8.iter().all(|s| !s.best), "{:?}", s8.iter().find(|s| s.best).map(|s| &s.model.id));
+        assert_eq!(s8.iter().find(|s| s.model.id == "qwen2.5-coder:3b").unwrap().fit, Fit::Fits);
+        let s16 = suggestions(&cat, &mk(16.0), &[]);
+        assert_eq!(s16.iter().find(|s| s.best).unwrap().model.id, "qwen3:8b");
         assert_eq!(s8.iter().find(|s| s.model.id == "qwen2.5-coder:14b").unwrap().fit, Fit::WontFit);
         let s32 = suggestions(&cat, &mk(32.0), &[]);
         let best32 = s32.iter().find(|s| s.best).unwrap();

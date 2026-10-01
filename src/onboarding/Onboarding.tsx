@@ -139,7 +139,9 @@ function ExecutorStep({ scan, budget, onNext }: { scan: ScanResult | null; budge
   const setSettings = useApp((s) => s.setSettings);
   const toast = useApp((s) => s.toast);
   const best: Suggestion | undefined = scan?.suggestions.find((s) => s.best);
-  const existing = scan?.local_models.find((m) => m.fit !== "wont_fit");
+  // Only models that can drive a coding agent count (tiny models write tool calls as text).
+  const existing = scan?.local_models.find((m) => m.fit !== "wont_fit" && m.catalog?.agentic !== false);
+  const tooSmall = scan?.local_models.find((m) => m.catalog?.agentic === false);
   const localPossible = !!existing || !!best;
   const [choice, setChoice] = useState<"local" | "cloud">(localPossible ? "local" : "cloud");
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
@@ -200,14 +202,22 @@ function ExecutorStep({ scan, budget, onNext }: { scan: ScanResult | null; budge
   const ollamaRt = catalog.runtimes.find((r) => r.id === "ollama");
   return (
     <>
-      <Title sub={localPossible ? "Routine steps run on an open-source agent. Pick where its model lives." : "No local model fits this Mac comfortably, so a cheap cloud model is recommended."}>Choose your executor</Title>
+      <Title
+        sub={
+          localPossible
+            ? "Routine steps run on an open-source agent. Pick where its model lives."
+            : "The local models that fit this Mac are too small to drive a coding agent reliably, so a cheap cloud model is recommended. Cloud steps cost cents and keep your Mac light."
+        }
+      >
+        Choose your executor
+      </Title>
       <div className="grid grid-cols-2 gap-3">
         <button onClick={() => setChoice("local")} className={cn("text-left rounded-xl border p-4", choice === "local" ? "border-accent ring-2 ring-accent/20 bg-accent-soft/30" : "border-line bg-panel")}>
           <div className="flex items-center gap-2 font-semibold"><Laptop className="h-4 w-4 text-local" /> Run locally</div>
           <div className="text-[12.5px] text-muted mt-1">OpenCode + {existing ? existing.catalog?.display_name ?? existing.name : best?.model.display_name ?? "a local model"}. Free, private, uses your Mac's memory.</div>
           {existing && <div className="mt-2"><Badge tone="ok">already downloaded: use existing</Badge></div>}
           {!existing && best && <div className="mt-2 flex gap-1.5"><FitBadge fit={best.fit} /><Badge>{gb(best.model.download_gb)} download</Badge></div>}
-          {!localPossible && <div className="mt-2"><Badge tone="warn">no model fits</Badge></div>}
+          {!localPossible && <div className="mt-2"><Badge tone="warn">{tooSmall ? `${tooSmall.name} is too small for agent work` : "no suitable model fits"}</Badge></div>}
         </button>
         <button onClick={() => setChoice("cloud")} className={cn("text-left rounded-xl border p-4", choice === "cloud" ? "border-accent ring-2 ring-accent/20 bg-accent-soft/30" : "border-line bg-panel")}>
           <div className="flex items-center gap-2 font-semibold"><Cloud className="h-4 w-4 text-cloud" /> Use a cheap cloud model</div>

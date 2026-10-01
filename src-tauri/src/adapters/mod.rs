@@ -86,6 +86,8 @@ pub struct StepRequest {
     pub model: Option<ModelRef>,
     pub library_agent: Option<String>,
     pub timeout: Duration,
+    /// Stop the attempt if the agent produces no output for this long.
+    pub stall_timeout: Duration,
     pub low_priority: bool,
     /// Read from the Keychain at spawn time; reaches the CLI only via env.
     pub api_key: Option<String>,
@@ -167,6 +169,14 @@ pub struct ParseState {
     /// The CLI reported failure even if it exited 0.
     pub failed: bool,
     pub saw_tokens: bool,
+    /// Set by a parser to stop the agent early (e.g. a model looping
+    /// without ever calling a tool). The step fails with this reason.
+    pub abort: Option<String>,
+    /// Consecutive model turns that used no tool (OpenCode).
+    pub text_only_turns: u32,
+    pub tool_in_turn: bool,
+    /// Turns where the model printed a tool call as plain text.
+    pub text_tool_calls: u32,
 }
 
 /// Shared `run` for CLI adapters: spawn in the workspace at lowered priority,
@@ -187,15 +197,53 @@ pub async fn run_cli(spec: &dyn CliSpec, registry: &ProcRegistry, label: &str, r
         .collect();
     log::info!("spawn {} {} (cwd {})", bin.display(), args.join(" "), req.workspace.display());
     let started = std::time::Instant::now();
+    // Local cancel so a parser abort or the stall watchdog can stop just this agent.
+    let cancel = req.cancel.child();
+    let last_output = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let stalled: Arc<parking_lot::Mutex<Option<String>>> = Default::default();
+    let watchdog = {
+        let (cancel, last, stalled, limit) = (cancel.clone(), last_output.clone(), stalled.clone(), req.stall_timeout);
+        tokio::spawn(async move {
+            let t0 = std::time::Instant::now();
+            loop {
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                let idle = t0.elapsed().as_secs().saturating_sub(last.load(std::sync::atomic::Ordering::Relaxed));
+                if idle >= limit.as_secs() {
+                    *stalled.lock() = Some(format!(
+                        "No output from the agent for {} minutes, so it was stopped. The model may be too slow or stuck on this Mac.",
+                        limit.as_secs() / 60
+                    ));
+                    cancel.cancel();
+                    break;
+                }
+            }
+        })
+    };
     let exit =
-        proc::run_streaming(cmd, RunOpts { registry, owner: &req.step_id, label, timeout: req.timeout, cancel: &req.cancel }, |s, line| {
+        proc::run_streaming(cmd, RunOpts { registry, owner: &req.step_id, label, timeout: req.timeout, cancel: &cancel }, |s, line| {
             let line = strip_ansi(line);
             if line.trim().is_empty() {
                 return;
             }
+            last_output.store(started.elapsed().as_secs(), std::sync::atomic::Ordering::Relaxed);
             spec.parse(s, &line, &mut st, &emit);
+            if st.abort.is_some() && !cancel.is_cancelled() {
+                cancel.cancel();
+            }
         })
         .await?;
+    watchdog.abort();
+    if st.abort.is_none() {
+        st.abort = stalled.lock().take();
+    }
+    if req.cancel.is_cancelled() {
+        st.abort = None; // the user (or governor) stopped it: report a cancel
+    }
+    if let Some(reason) = &st.abort {
+        if !req.cancel.is_cancelled() {
+            emit(AgentEvent::Error { text: reason.clone() });
+        }
+    }
     log::info!(
         "{label} exited: {exit:?} after {:.1}s{}",
         started.elapsed().as_secs_f64(),
@@ -205,6 +253,10 @@ pub async fn run_cli(spec: &dyn CliSpec, registry: &ProcRegistry, label: &str, r
 }
 
 pub fn outcome_from(exit: ExitKind, st: ParseState) -> StepOutcome {
+    if let Some(reason) = st.abort {
+        // Stopped by us (loop/stall), not by the user: a failed attempt.
+        return StepOutcome { result: StepResult::Failure, exit_code: None, summary: st.summary, error: Some(reason) };
+    }
     let (result, code) = match exit {
         ExitKind::Exited(0) if !st.failed => (StepResult::Success, Some(0)),
         ExitKind::Exited(c) => (StepResult::Failure, Some(c)),

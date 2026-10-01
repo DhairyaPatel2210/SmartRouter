@@ -751,6 +751,15 @@ async fn run_agent(
         ctl.local_step.store(true, Ordering::SeqCst);
         core.governor.enter_local(&ctl.run_id);
     }
+    if is_local {
+        event(
+            core,
+            &ctl.run_id,
+            &step.id,
+            "governor",
+            "The local model is working. Small models can be slow; the attempt stops if there's no output for 5 minutes.",
+        );
+    }
 
     let acc = Arc::new(Mutex::new(Acc::default()));
     let (c2, run_id, step_id, ws, acc2, ctl2) =
@@ -823,6 +832,8 @@ async fn run_agent(
         model: d.model.clone(),
         library_agent,
         timeout,
+        // Local models stop after 5 silent minutes; paid/cloud agents may run long test commands.
+        stall_timeout: Duration::from_secs(if is_local { 300 } else { 600 }),
         low_priority: st.settings.lower_priority,
         api_key,
         cancel: step_cancel,

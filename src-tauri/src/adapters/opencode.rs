@@ -88,6 +88,12 @@ pub fn config_for(m: &ModelRef) -> (String, String) {
     (cfg.to_string(), format!("{pk}/{}", m.name))
 }
 
+/// `{"name": "write", "arguments": {...}}` printed as text instead of a real tool call.
+fn looks_like_text_tool_call(t: &str) -> bool {
+    let compact: String = t.chars().filter(|c| !c.is_whitespace()).collect();
+    compact.contains("\"name\":") && (compact.contains("\"arguments\":") || compact.contains("\"parameters\":"))
+}
+
 impl CliSpec for OpenCode {
     fn bin(&self) -> String {
         "opencode".into()
@@ -114,8 +120,12 @@ impl CliSpec for OpenCode {
         };
         let part = v.get("part").cloned().unwrap_or_default();
         match v.get("type").and_then(|t| t.as_str()) {
+            Some("step_start") => st.tool_in_turn = false,
             Some("text") => {
                 let t = part.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                if looks_like_text_tool_call(t) {
+                    st.text_tool_calls += 1;
+                }
                 for l in t.lines().filter(|l| !l.trim().is_empty()) {
                     emit(AgentEvent::Stdout { text: l.to_string() });
                 }
@@ -124,6 +134,8 @@ impl CliSpec for OpenCode {
                 }
             }
             Some("tool_use") => {
+                st.tool_in_turn = true;
+                st.text_only_turns = 0;
                 let name = part.get("tool").and_then(|t| t.as_str()).unwrap_or("tool").to_string();
                 let input = part.pointer("/state/input").cloned().unwrap_or_default();
                 let detail = {
@@ -146,6 +158,18 @@ impl CliSpec for OpenCode {
                 emit(AgentEvent::ToolCall { name, detail });
             }
             Some("step_finish") => {
+                if !st.tool_in_turn {
+                    st.text_only_turns += 1;
+                }
+                // Small local models often print tool calls as text and loop
+                // (verified: qwen2.5-coder:3b). Stop after 3 tool-less turns.
+                if st.text_only_turns >= 3 && st.abort.is_none() {
+                    st.abort = Some(if st.text_tool_calls > 0 {
+                        "The model wrote its tool calls as plain text instead of calling tools, so it can't edit files. Use a model with reliable tool calling (a larger local model or a cloud model).".into()
+                    } else {
+                        "The agent replied 3 times without using any tools, so it was stopped as stuck.".into()
+                    });
+                }
                 if let Some(t) = part.get("tokens") {
                     let n = |p: &str| t.pointer(p).and_then(|x| x.as_u64()).unwrap_or(0);
                     st.saw_tokens = true;
@@ -246,6 +270,14 @@ mod tests {
         let (cfg, _) = config_for(&cloud);
         assert!(cfg.contains("{env:ORCH_PROVIDER_API_KEY}"));
         assert!(cfg.contains("external_directory"));
+    }
+
+    #[test]
+    fn stops_a_model_that_never_calls_tools() {
+        let c = OpenCode::new(AdapterCtx { registry: Default::default(), data_dir: "/tmp".into(), demo_agents: false });
+        let (_, st) = parse_fixture(&c, &fixture("opencode", "text-tool-calls.jsonl"));
+        let reason = st.abort.expect("should abort");
+        assert!(reason.contains("plain text"), "{reason}");
     }
 
     #[test]

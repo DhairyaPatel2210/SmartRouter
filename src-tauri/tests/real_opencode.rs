@@ -41,6 +41,7 @@ async fn opencode_writes_a_file_via_fake_provider() {
                 model: Some(model),
                 library_agent: None,
                 timeout: Duration::from_secs(120),
+                stall_timeout: Duration::from_secs(300),
                 low_priority: true,
                 api_key: Some(fake::FAKE_KEY.into()),
                 cancel: Default::default(),

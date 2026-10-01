@@ -181,6 +181,15 @@ impl Core {
             }
             None => governor::preflight(None, false, &settings, sys.clone()),
         };
+        let mut pf = pf;
+        if let Some(e) = first_local {
+            if self.catalog.model(&e.model.name).is_some_and(|m| m.agentic == Some(false)) {
+                pf.notes.push(format!(
+                    "{} is too small to drive a coding agent reliably (it writes tool calls as text), so its steps will likely fail and escalate. A cheap cloud model is recommended.",
+                    e.model.label()
+                ));
+            }
+        }
         let budget = pf.budget_gb;
         let mut smaller = vec![];
         if let (Some(e), Some(need)) = (first_local, pf.mem_needed_gb) {

@@ -65,6 +65,10 @@ pub struct CatalogModel {
     pub mem_gb: f64,
     pub ctx_max: u32,
     pub tool_calling: bool,
+    /// Calls tools reliably inside coding agents (true), verified not to
+    /// (false), or untested (null).
+    #[serde(default)]
+    pub agentic: Option<bool>,
     pub runtime: String,
     #[serde(default)]
     pub good_for: String,

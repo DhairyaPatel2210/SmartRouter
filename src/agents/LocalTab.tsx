@@ -184,6 +184,7 @@ function InstalledRow({ m, busy, act }: { m: LocalModel; busy: string | null; ac
           {m.catalog?.display_name ?? m.name}
           {m.loaded && <Badge tone="info">loaded</Badge>}
           {m.in_pool && <Badge tone="local"><Check className="h-3 w-3" /> in pool</Badge>}
+          {m.catalog?.agentic === false && <Badge tone="warn" title="Too small to call tools reliably inside coding agents; steps on it will likely fail and escalate">chores only</Badge>}
         </div>
         <div className="text-[11.5px] text-muted font-mono">{m.name} · {gb(m.size_gb)} on disk · ~{gb(m.mem_gb)} RAM at {Math.round(m.ctx / 1024)}k context</div>
       </div>
@@ -205,7 +206,11 @@ function SuggestionCard({ s, pull }: { s: Suggestion; pull?: { status: string; c
     <Card className={`p-4 ${s.best ? "border-accent/50 ring-1 ring-accent/20" : ""}`}>
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <div className="font-semibold flex items-center gap-2">{s.model.display_name}{s.best && <Badge tone="accent">best fit</Badge>}</div>
+          <div className="font-semibold flex items-center gap-2">
+            {s.model.display_name}
+            {s.best && <Badge tone="accent">best fit</Badge>}
+            {s.model.agentic === false && <Badge tone="warn">chores only</Badge>}
+          </div>
           <div className="text-[12px] text-muted mt-0.5">{s.model.good_for}</div>
         </div>
         <FitBadge fit={s.fit} />

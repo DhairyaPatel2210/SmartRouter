@@ -441,6 +441,7 @@ export interface CatalogModel {
   mem_gb: number;
   ctx_max: number;
   tool_calling: boolean;
+  agentic: boolean | null;
   runtime: string;
   good_for: string;
 }
