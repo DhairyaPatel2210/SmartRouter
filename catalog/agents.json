@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "cursor",
+      "display_name": "Cursor Agent",
+      "family": "paid",
+      "tagline": "Cursor's agent in your terminal, on your Cursor plan.",
+      "bin": "cursor-agent",
+      "install": {
+        "macos": [{ "label": "Official installer", "command": "curl https://cursor.com/install -fsS | bash" }],
+        "linux": [{ "label": "Official installer", "command": "curl https://cursor.com/install -fsS | bash" }]
+      },
+      "uninstall": { "macos": "rm -f ~/.local/bin/cursor-agent && rm -rf ~/.local/share/cursor-agent" },
+      "detect": "cursor-agent --version",
+      "auth": "cursor-agent login",
+      "headless": "cursor-agent -p --output-format stream-json --force <prompt>",
+      "providers": [],
+      "library": { "rules": ".cursor/rules/<id>.mdc", "skills": "fallback", "agents": "converted to a rule" },
+      "known_good_version": "2025.11",
+      "docs": "https://cursor.com/docs/cli/overview"
+    },
+    {
+      "id": "claude",
+      "display_name": "Claude Code",
+      "family": "paid",
+      "tagline": "Anthropic's coding agent, on your Claude plan or API key.",
+      "bin": "claude",
+      "install": {
+        "macos": [
+          { "label": "Native installer", "command": "curl -fsSL https://claude.ai/install.sh | bash" },
+          { "label": "npm", "command": "npm install -g @anthropic-ai/claude-code" }
+        ],
+        "linux": [{ "label": "Native installer", "command": "curl -fsSL https://claude.ai/install.sh | bash" }],
+        "windows": [{ "label": "npm", "command": "npm install -g @anthropic-ai/claude-code" }]
+      },
+      "uninstall": { "macos": "npm uninstall -g @anthropic-ai/claude-code; rm -f ~/.local/bin/claude" },
+      "detect": "claude --version",
+      "auth": "claude auth login",
+      "headless": "claude -p --output-format stream-json --verbose --permission-mode acceptEdits <prompt>",
+      "providers": ["anthropic"],
+      "library": { "rules": "CLAUDE.md managed block", "skills": ".claude/skills/<id>/", "agents": ".claude/agents/<id>.md" },
+      "known_good_version": "2.1.278",
+      "docs": "https://docs.claude.com/en/docs/claude-code"
+    },
+    {
+      "id": "codex",
+      "display_name": "Codex CLI",
+      "family": "paid",
+      "tagline": "OpenAI's coding agent; can also drive local Ollama models with --oss.",
+      "bin": "codex",
+      "install": {
+        "macos": [
+          { "label": "Homebrew", "command": "brew install codex" },
+          { "label": "npm", "command": "npm install -g @openai/codex" }
+        ],
+        "linux": [{ "label": "npm", "command": "npm install -g @openai/codex" }],
+        "windows": [{ "label": "npm", "command": "npm install -g @openai/codex" }]
+      },
+      "uninstall": { "macos": "brew uninstall codex || npm uninstall -g @openai/codex" },
+      "detect": "codex --version",
+      "auth": "codex login",
+      "headless": "codex exec --json --full-auto --skip-git-repo-check <prompt>",
+      "providers": ["openai", "ollama"],
+      "library": { "rules": "AGENTS.md managed block", "skills": "fallback", "agents": "task-file role header" },
+      "known_good_version": "0.46.0",
+      "docs": "https://developers.openai.com/codex/cli"
+    },
+    {
+      "id": "copilot",
+      "display_name": "GitHub Copilot CLI",
+      "family": "paid",
+      "tagline": "GitHub's coding agent, on your Copilot plan.",
+      "bin": "copilot",
+      "install": {
+        "macos": [{ "label": "npm", "command": "npm install -g @github/copilot" }],
+        "linux": [{ "label": "npm", "command": "npm install -g @github/copilot" }],
+        "windows": [{ "label": "npm", "command": "npm install -g @github/copilot" }]
+      },
+      "uninstall": { "macos": "npm uninstall -g @github/copilot" },
+      "detect": "copilot --version",
+      "auth": "copilot",
+      "headless": "copilot -p <prompt> --allow-all-tools",
+      "providers": [],
+      "library": { "rules": ".github/copilot-instructions.md managed block", "skills": "fallback", "agents": ".github/agents/<id>.agent.md" },
+      "known_good_version": "0.0.350",
+      "docs": "https://docs.github.com/copilot/how-tos/use-copilot-agents/use-copilot-cli"
+    },
+    {
+      "id": "opencode",
+      "display_name": "OpenCode",
+      "family": "open_source",
+      "tagline": "Open-source coding agent. Runs on local Ollama models or any cheap cloud model.",
+      "bin": "opencode",
+      "install": {
+        "macos": [
+          { "label": "Homebrew", "command": "brew install sst/tap/opencode" },
+          { "label": "npm", "command": "npm install -g opencode-ai" }
+        ],
+        "linux": [{ "label": "Official installer", "command": "curl -fsSL https://opencode.ai/install | bash" }],
+        "windows": [{ "label": "npm", "command": "npm install -g opencode-ai" }]
+      },
+      "uninstall": { "macos": "brew uninstall opencode || npm uninstall -g opencode-ai" },
+      "detect": "opencode --version",
+      "auth": null,
+      "headless": "opencode run --format json -m <provider>/<model> --dir <workspace> <prompt>",
+      "providers": ["ollama", "lmstudio", "llamacpp", "mlx", "openai_compatible", "openrouter", "openai", "anthropic", "gemini"],
+      "library": { "rules": "AGENTS.md managed block", "skills": ".opencode/skills/<id>/SKILL.md", "agents": ".opencode/agents/<id>.md" },
+      "known_good_version": "1.18.34",
+      "docs": "https://opencode.ai/docs/cli/"
+    },
+    {
+      "id": "aider",
+      "display_name": "Aider",
+      "family": "open_source",
+      "tagline": "Mature, git-native pair programmer; strong with local models.",
+      "bin": "aider",
+      "install": {
+        "macos": [
+          { "label": "Homebrew", "command": "brew install aider" },
+          { "label": "pip (aider-install)", "command": "python3 -m pip install aider-install && aider-install" }
+        ],
+        "linux": [{ "label": "pip (aider-install)", "command": "python3 -m pip install aider-install && aider-install" }]
+      },
+      "uninstall": { "macos": "brew uninstall aider" },
+      "detect": "aider --version",
+      "auth": null,
+      "headless": "aider --message <prompt> --yes-always --no-auto-commits --model <model>",
+      "providers": ["ollama", "lmstudio", "llamacpp", "mlx", "openai_compatible", "openrouter", "openai", "anthropic", "gemini"],
+      "library": { "rules": "AGENTS.md (passed with --read)", "skills": "fallback", "agents": "task-file role header" },
+      "known_good_version": "0.86.1",
+      "docs": "https://aider.chat/docs/scripting.html"
+    },
+    {
+      "id": "goose",
+      "display_name": "Goose",
+      "family": "open_source",
+      "tagline": "Extensible open-source agent with many providers.",
+      "bin": "goose",
+      "install": {
+        "macos": [{ "label": "Homebrew", "command": "brew install block-goose-cli" }],
+        "linux": [{ "label": "Official installer", "command": "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash" }]
+      },
+      "uninstall": { "macos": "brew uninstall block-goose-cli" },
+      "detect": "goose --version",
+      "auth": null,
+      "headless": "goose run --no-session -t <prompt>",
+      "providers": ["ollama", "openai_compatible", "openrouter", "openai", "anthropic", "lmstudio", "llamacpp", "mlx"],
+      "library": { "rules": ".goosehints managed block", "skills": "fallback", "agents": "task-file role header" },
+      "known_good_version": "1.12.0",
+      "docs": "https://block.github.io/goose/docs/guides/running-tasks"
+    }
+  ]
+}

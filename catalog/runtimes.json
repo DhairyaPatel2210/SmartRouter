@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "runtimes": [
+    {
+      "id": "ollama",
+      "display_name": "Ollama",
+      "type": "ollama",
+      "endpoint": "http://127.0.0.1:11434",
+      "default": true,
+      "install": {
+        "macos": [
+          { "label": "Homebrew", "command": "brew install ollama" },
+          { "label": "Official app", "command": "open https://ollama.com/download/mac" }
+        ],
+        "linux": [{ "label": "Official installer", "command": "curl -fsSL https://ollama.com/install.sh | sh" }]
+      },
+      "docs": "https://github.com/ollama/ollama/blob/main/docs/api.md"
+    },
+    { "id": "lmstudio", "display_name": "LM Studio", "type": "lmstudio", "endpoint": "http://127.0.0.1:1234/v1", "install": { "macos": [{ "label": "Download", "command": "open https://lmstudio.ai" }] }, "docs": "https://lmstudio.ai/docs/app/api" },
+    { "id": "llamacpp", "display_name": "llama.cpp server", "type": "llamacpp", "endpoint": "http://127.0.0.1:8080/v1", "install": { "macos": [{ "label": "Homebrew", "command": "brew install llama.cpp" }] }, "docs": "https://github.com/ggml-org/llama.cpp/tree/master/tools/server" },
+    { "id": "mlx", "display_name": "MLX server", "type": "mlx", "endpoint": "http://127.0.0.1:8081/v1", "install": { "macos": [{ "label": "pip", "command": "python3 -m pip install mlx-lm" }] }, "docs": "https://github.com/ml-explore/mlx-lm" }
+  ]
+}

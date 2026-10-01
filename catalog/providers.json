@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "providers": [
+    { "id": "openrouter", "display_name": "OpenRouter", "type": "openrouter", "base_url": "https://openrouter.ai/api/v1", "signup_url": "https://openrouter.ai/keys", "key_prefix": "sk-or-", "notes": "Hundreds of models behind one key; shows prices and tool support." },
+    { "id": "deepseek", "display_name": "DeepSeek", "type": "openai_compatible", "base_url": "https://api.deepseek.com/v1", "signup_url": "https://platform.deepseek.com/api_keys", "key_prefix": "sk-", "notes": "Very cheap, strong at code." },
+    { "id": "gemini", "display_name": "Google Gemini", "type": "gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "signup_url": "https://aistudio.google.com/apikey", "key_prefix": "AIza", "notes": "Generous free tier on Flash models." },
+    { "id": "groq", "display_name": "Groq", "type": "openai_compatible", "base_url": "https://api.groq.com/openai/v1", "signup_url": "https://console.groq.com/keys", "key_prefix": "gsk_", "notes": "Extremely fast open models." },
+    { "id": "openai", "display_name": "OpenAI", "type": "openai", "base_url": "https://api.openai.com/v1", "signup_url": "https://platform.openai.com/api-keys", "key_prefix": "sk-", "notes": "Use the mini/nano models for cheap steps." },
+    { "id": "anthropic", "display_name": "Anthropic", "type": "anthropic", "base_url": "https://api.anthropic.com/v1", "signup_url": "https://console.anthropic.com/settings/keys", "key_prefix": "sk-ant-", "notes": "Haiku is a capable cheap executor." },
+    { "id": "custom", "display_name": "Other (OpenAI-compatible)", "type": "openai_compatible", "base_url": "", "signup_url": "", "key_prefix": "", "notes": "Any endpoint that speaks the OpenAI chat-completions API." }
+  ]
+}
