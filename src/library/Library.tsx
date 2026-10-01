@@ -121,7 +121,7 @@ export default function Library() {
       )}
 
       <div className="flex-1 flex min-h-0">
-        <div className="w-[280px] shrink-0 border-r border-line overflow-auto p-3 space-y-4">
+        <div className="w-[248px] shrink-0 border-r border-line overflow-auto p-3 space-y-4">
           {!view && <div className="p-4 text-faint"><Spinner /></div>}
           {KINDS.map(({ kind, label, icon: Icon, hint }) => {
             const list = items.filter((i) => i.kind === kind);
@@ -149,11 +149,13 @@ export default function Library() {
           {sel ? (
             <>
               <div className="h-11 shrink-0 flex items-center gap-2 px-4 border-b border-line">
-                <span className="font-semibold truncate">{sel.display_name}</span>
-                <span className="text-xs text-faint font-mono">{sel.id}</span>
+                <span className="min-w-0 flex-1 flex items-baseline gap-2">
+                  <span className="font-semibold truncate">{sel.display_name}</span>
+                  <span className="text-xs text-faint font-mono truncate">{sel.id}</span>
+                </span>
                 <ScopeBadge scope={sel.scope} />
                 {sel.overridden && <Badge tone="warn" title="A workspace item with the same id overrides this one">overridden</Badge>}
-                <span className="ml-auto flex items-center gap-1">
+                <span className="shrink-0 flex items-center gap-1">
                   {dirty && <span className="text-xs text-warn mr-1">Unsaved</span>}
                   <Button size="sm" variant={dirty ? "primary" : "secondary"} disabled={!dirty} onClick={saveItem} title="⌘S"><Save className="h-3.5 w-3.5" /> Save</Button>
                   <ItemActions item={sel} wsId={wsId} onDone={(p) => { if (p) setSelPath(p); reload(); }} />
@@ -225,10 +227,10 @@ function ItemActions({ item, wsId, onDone }: { item: LibraryItem; wsId: string |
     <>
       <Button size="icon" variant="ghost" title="Duplicate" onClick={async () => onDone(await api.libraryDuplicate(item.path, wsId))}><Copy className="h-3.5 w-3.5" /></Button>
       <Button
-        size="sm"
+        size="icon"
         variant="ghost"
         disabled={other === "workspace" && !wsId}
-        title={`Move to ${other}`}
+        title={other === "global" ? "Make global (every workspace)" : "Move to this workspace"}
         onClick={async () => {
           try {
             onDone(await api.libraryMove(item.path, other, false, wsId));
@@ -239,7 +241,6 @@ function ItemActions({ item, wsId, onDone }: { item: LibraryItem; wsId: string |
         }}
       >
         {other === "global" ? <Globe2 className="h-3.5 w-3.5" /> : <FolderInput className="h-3.5 w-3.5" />}
-        {other === "global" ? "Make global" : "Move to workspace"}
       </Button>
       <Button size="icon" variant="ghost" title="Delete" className="hover:text-bad" onClick={async () => setConfirm(await api.libraryReferences(item.path, wsId))}><Trash2 className="h-3.5 w-3.5" /></Button>
       <Dialog
@@ -277,7 +278,7 @@ function PreviewPane({ item, view, wsId, draft }: { item: LibraryItem; view: Lib
   const p = previews.find((x) => x.cli === cli);
   const status = (pv: Preview) => (!pv.installed ? "not installed" : pv.support === "fallback" ? "task-file fallback" : pv.support === "converted" ? "converted" : "synced");
   return (
-    <div className="w-[340px] shrink-0 border-l border-line flex flex-col min-h-0">
+    <div className="w-[300px] shrink-0 border-l border-line flex flex-col min-h-0">
       <div className="px-3 pt-2">
         <div className="text-[11px] font-semibold uppercase tracking-wider text-faint mb-1">What each CLI receives</div>
         <Tabs

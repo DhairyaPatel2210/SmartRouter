@@ -157,3 +157,7 @@ input, textarea, [contenteditable], .selectable, pre, code {
 
 .drag { -webkit-app-region: drag; app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
+
+.theme-switching *, .theme-switching *::before, .theme-switching *::after {
+  transition: none !important;
+}

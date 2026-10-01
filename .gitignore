@@ -9,3 +9,5 @@ src-tauri/gen/schemas/
 coverage/
 playwright-report/
 test-results/
+playwright-report/
+test-results/

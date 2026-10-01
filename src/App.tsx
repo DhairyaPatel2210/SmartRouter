@@ -25,7 +25,13 @@ export default function App() {
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => document.documentElement.classList.toggle("dark", theme === "dark" || (theme === "system" && mq.matches));
+    const apply = () => {
+      // Switch themes without animating every color transition.
+      const root = document.documentElement;
+      root.classList.add("theme-switching");
+      root.classList.toggle("dark", theme === "dark" || (theme === "system" && mq.matches));
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
+    };
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
