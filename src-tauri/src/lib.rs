@@ -1,11 +1,17 @@
 pub mod adapters;
 pub mod brand;
 pub mod db;
+pub mod engine;
+pub mod governor;
 pub mod handoff;
+pub mod installer;
 pub mod library;
+pub mod macos;
 pub mod proc;
 pub mod providers;
+pub mod router;
 pub mod settings;
+pub mod telemetry;
 pub mod types;
 pub mod verify;
 pub mod workspace;

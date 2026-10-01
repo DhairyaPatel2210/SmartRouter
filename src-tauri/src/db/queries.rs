@@ -454,3 +454,225 @@ mod tests {
         assert_eq!(db.steps("r").unwrap()[0].status, "cancelled");
     }
 }
+
+// ---------- agents, providers, models ----------
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct AgentRow {
+    pub id: String,
+    pub display_name: String,
+    pub kind: String,
+    pub cli: String,
+    pub version: Option<String>,
+    pub install_path: Option<String>,
+    pub auth_ok: bool,
+    pub enabled: bool,
+    pub supports_local_models: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ProviderRow {
+    pub id: String,
+    pub display_name: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub base_url: Option<String>,
+    pub key_ref: Option<String>,
+    pub enabled: bool,
+    pub monthly_cap_usd: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ModelRow {
+    pub id: String,
+    pub display_name: String,
+    pub provider_id: String,
+    pub runtime_id: Option<String>,
+    pub name: String,
+    pub tier: String,
+    pub size_gb: Option<f64>,
+    pub mem_needed_gb: Option<f64>,
+    pub quant: Option<String>,
+    pub ctx_len: Option<i64>,
+    pub tool_calling: Option<bool>,
+    pub price_in_per_m: Option<f64>,
+    pub price_out_per_m: Option<f64>,
+    pub path: Option<String>,
+    pub installed: bool,
+}
+
+impl Db {
+    /// Records detection results, keeping the user's display name and enabled flag.
+    pub fn upsert_agent(&self, a: &AgentRow) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT INTO agents (id, display_name, kind, cli, version, install_path, auth_ok, enabled, supports_local_models)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+                 ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, cli=excluded.cli, version=excluded.version,
+                   install_path=excluded.install_path, auth_ok=excluded.auth_ok, supports_local_models=excluded.supports_local_models",
+                params![a.id, a.display_name, a.kind, a.cli, a.version, a.install_path, a.auth_ok, a.enabled, a.supports_local_models],
+            )
+        })?;
+        Ok(())
+    }
+
+    pub fn agents(&self) -> Result<Vec<AgentRow>> {
+        self.with(|c| {
+            let mut st = c.prepare("SELECT id, display_name, kind, cli, version, install_path, auth_ok, enabled, supports_local_models FROM agents")?;
+            let rows = st
+                .query_map([], |r| {
+                    Ok(AgentRow {
+                        id: r.get(0)?,
+                        display_name: r.get(1)?,
+                        kind: r.get(2)?,
+                        cli: r.get(3)?,
+                        version: r.get(4)?,
+                        install_path: r.get(5)?,
+                        auth_ok: r.get(6)?,
+                        enabled: r.get(7)?,
+                        supports_local_models: r.get(8)?,
+                    })
+                })?
+                .collect();
+            rows
+        })
+    }
+
+    pub fn set_agent_meta(&self, id: &str, display_name: Option<&str>, enabled: Option<bool>) -> Result<()> {
+        self.with(|c| {
+            if let Some(n) = display_name {
+                c.execute("UPDATE agents SET display_name=?2 WHERE id=?1", params![id, n])?;
+            }
+            if let Some(e) = enabled {
+                c.execute("UPDATE agents SET enabled=?2 WHERE id=?1", params![id, e])?;
+            }
+            Ok(())
+        })
+    }
+
+    pub fn save_provider(&self, p: &ProviderRow) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR REPLACE INTO providers (id, display_name, type, base_url, key_ref, enabled, monthly_cap_usd)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                params![p.id, p.display_name, p.kind, p.base_url, p.key_ref, p.enabled, p.monthly_cap_usd],
+            )
+        })?;
+        Ok(())
+    }
+
+    pub fn providers(&self) -> Result<Vec<ProviderRow>> {
+        self.with(|c| {
+            let mut st = c.prepare("SELECT id, display_name, type, base_url, key_ref, enabled, monthly_cap_usd FROM providers ORDER BY display_name")?;
+            let rows = st
+                .query_map([], |r| {
+                    Ok(ProviderRow {
+                        id: r.get(0)?,
+                        display_name: r.get(1)?,
+                        kind: r.get(2)?,
+                        base_url: r.get(3)?,
+                        key_ref: r.get(4)?,
+                        enabled: r.get(5)?,
+                        monthly_cap_usd: r.get(6)?,
+                    })
+                })?
+                .collect();
+            rows
+        })
+    }
+
+    pub fn delete_provider(&self, id: &str) -> Result<()> {
+        self.with(|c| {
+            c.execute("DELETE FROM providers WHERE id=?1", [id])?;
+            c.execute("DELETE FROM models WHERE provider_id=?1", [id])
+        })?;
+        Ok(())
+    }
+
+    pub fn save_model(&self, m: &ModelRow) -> Result<()> {
+        self.with(|c| {
+            c.execute(
+                "INSERT OR REPLACE INTO models (id, display_name, provider_id, runtime_id, name, tier, size_gb, mem_needed_gb,
+                 quant, ctx_len, tool_calling, price_in_per_m, price_out_per_m, path, installed)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+                params![
+                    m.id, m.display_name, m.provider_id, m.runtime_id, m.name, m.tier, m.size_gb, m.mem_needed_gb, m.quant,
+                    m.ctx_len, m.tool_calling, m.price_in_per_m, m.price_out_per_m, m.path, m.installed
+                ],
+            )
+        })?;
+        Ok(())
+    }
+
+    pub fn models(&self) -> Result<Vec<ModelRow>> {
+        self.with(|c| {
+            let mut st = c.prepare(
+                "SELECT id, display_name, provider_id, runtime_id, name, tier, size_gb, mem_needed_gb, quant, ctx_len,
+                 tool_calling, price_in_per_m, price_out_per_m, path, installed FROM models ORDER BY tier, display_name",
+            )?;
+            let rows = st
+                .query_map([], |r| {
+                    Ok(ModelRow {
+                        id: r.get(0)?,
+                        display_name: r.get(1)?,
+                        provider_id: r.get(2)?,
+                        runtime_id: r.get(3)?,
+                        name: r.get(4)?,
+                        tier: r.get(5)?,
+                        size_gb: r.get(6)?,
+                        mem_needed_gb: r.get(7)?,
+                        quant: r.get(8)?,
+                        ctx_len: r.get(9)?,
+                        tool_calling: r.get(10)?,
+                        price_in_per_m: r.get(11)?,
+                        price_out_per_m: r.get(12)?,
+                        path: r.get(13)?,
+                        installed: r.get(14)?,
+                    })
+                })?
+                .collect();
+            rows
+        })
+    }
+
+    pub fn delete_model(&self, id: &str) -> Result<()> {
+        self.with(|c| c.execute("DELETE FROM models WHERE id=?1", [id]))?;
+        Ok(())
+    }
+
+    /// Estimated spend on a provider since `since` (for monthly caps).
+    pub fn provider_spend_since(&self, provider_id: &str, since: i64) -> Result<f64> {
+        let like = format!("{provider_id}/%");
+        self.with(|c| {
+            c.query_row(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM steps WHERE model_id LIKE ?1 AND COALESCE(started_at, 0) >= ?2",
+                params![like, since],
+                |r| r.get(0),
+            )
+        })
+    }
+
+    pub fn profiles(&self) -> Result<Vec<(String, String, Vec<String>)>> {
+        self.with(|c| {
+            let mut st = c.prepare("SELECT id, display_name, item_ids_json FROM library_profiles ORDER BY display_name")?;
+            let rows = st
+                .query_map([], |r| {
+                    let j: String = r.get(2)?;
+                    Ok((r.get(0)?, r.get(1)?, serde_json::from_str(&j).unwrap_or_default()))
+                })?
+                .collect();
+            rows
+        })
+    }
+
+    pub fn save_profile(&self, id: &str, name: &str, items: &[String]) -> Result<()> {
+        let j = serde_json::to_string(items)?;
+        self.with(|c| c.execute("INSERT OR REPLACE INTO library_profiles (id, display_name, item_ids_json) VALUES (?1,?2,?3)", params![id, name, j]))?;
+        Ok(())
+    }
+
+    pub fn delete_profile(&self, id: &str) -> Result<()> {
+        self.with(|c| c.execute("DELETE FROM library_profiles WHERE id=?1", [id]))?;
+        Ok(())
+    }
+}

@@ -11,7 +11,10 @@
 //! - `slow:MS`       sleep MS between lines
 //! - `plan-stdout`   print the plan instead of writing plan.md
 //!
-//! `FAKE_PLAN_STEPS=N` sets the plan length (1..=6, default 3).
+//! - `steps:N`       plan length (1..=6, default 3; also `FAKE_PLAN_STEPS`)
+//!
+//! A `<handoff>/fake-scenario` file in the workspace overrides the env var,
+//! so parallel tests can use different scenarios.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -33,11 +36,17 @@ struct Scenario {
     flood: usize,
     slow_ms: u64,
     plan_stdout: bool,
+    steps: Option<usize>,
 }
 
-fn scenario() -> Scenario {
-    let raw = std::env::var("FAKE_AGENT_SCENARIO").unwrap_or_default();
-    let mut s = Scenario { fail_step: None, break_check: None, always_fail: None, flood: 0, slow_ms: 0, plan_stdout: false };
+/// Scenario from `<handoff>/fake-scenario` in the workspace (per-test), else the env var.
+fn scenario_raw(cwd: &Path, handoff: &str) -> String {
+    std::fs::read_to_string(cwd.join(handoff).join("fake-scenario"))
+        .unwrap_or_else(|_| std::env::var("FAKE_AGENT_SCENARIO").unwrap_or_default())
+}
+
+fn scenario(raw: &str) -> Scenario {
+    let mut s = Scenario { fail_step: None, break_check: None, always_fail: None, flood: 0, slow_ms: 0, plan_stdout: false, steps: None };
     for part in raw.split(',').map(str::trim) {
         let (k, v) = part.split_once(':').unwrap_or((part, ""));
         match k {
@@ -47,6 +56,7 @@ fn scenario() -> Scenario {
             "flood" => s.flood = v.parse().unwrap_or(0),
             "slow" => s.slow_ms = v.parse().unwrap_or(0),
             "plan-stdout" => s.plan_stdout = true,
+            "steps" => s.steps = v.parse().ok(),
             _ => {}
         }
     }
@@ -67,7 +77,7 @@ pub fn main(args: &[String]) -> i32 {
     let prompt = args.iter().filter(|a| !a.starts_with("--")).cloned().collect::<Vec<_>>().join(" ");
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let handoff = std::env::var("FAKE_HANDOFF_DIR").unwrap_or_else(|_| crate::brand::HANDOFF_DIR_NAME.to_string());
-    let sc = scenario();
+    let sc = scenario(&scenario_raw(&cwd, &handoff));
     let model = std::env::var("FAKE_AGENT_MODEL").unwrap_or_else(|_| "fake-model".into());
     emit(serde_json::json!({"t": "text", "v": format!("fake agent started (model {model})")}), sc.slow_ms);
 
@@ -112,7 +122,11 @@ pub fn main(args: &[String]) -> i32 {
 }
 
 fn plan(cwd: &Path, handoff: &str, prompt: &str, sc: &Scenario) -> i32 {
-    let steps: usize = std::env::var("FAKE_PLAN_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(3).clamp(1, PLAN_TASKS.len());
+    let steps: usize = sc
+        .steps
+        .or_else(|| std::env::var("FAKE_PLAN_STEPS").ok().and_then(|v| v.parse().ok()))
+        .unwrap_or(3)
+        .clamp(1, PLAN_TASKS.len());
     let goal = prompt
         .lines()
         .find_map(|l| l.strip_prefix("Goal: "))
