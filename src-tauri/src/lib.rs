@@ -1,10 +1,14 @@
 pub mod adapters;
 pub mod brand;
 pub mod db;
+pub mod handoff;
+pub mod library;
 pub mod proc;
 pub mod providers;
 pub mod settings;
 pub mod types;
+pub mod verify;
+pub mod workspace;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
