@@ -28,7 +28,7 @@ describe("workflow model", () => {
 
   it("an edited graph changes the compiled mode", () => {
     const w = templateFromMode(balanced);
-    w.nodes = w.nodes.map((n) => (n.id === "exec-low" ? { ...n, data: { ...n.data, tier: "premium" } } : n)).filter((n) => n.data.kind !== "review");
+    w.nodes = w.nodes.map((n) => (n.id === "exec-low" ? { ...n, data: { ...n.data, tier: "premium" as const } } : n)).filter((n) => n.data.kind !== "review");
     const c = compileWorkflow(w);
     expect(c.low).toBe("paid");
     expect(c.review).toBe(false);
