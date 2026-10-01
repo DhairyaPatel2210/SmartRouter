@@ -154,6 +154,7 @@ async fn restore_if_untouched(core: &Core, ctl: &RunCtl, run: &mut RunRow, steps
         Ok(()) => {
             let stashed = run.summary.as_object_mut().and_then(|o| o.remove("stashed")).is_some();
             run.summary["restored"] = true.into();
+            run.summary["restored_stash"] = stashed.into();
             run.branch = None;
             core.bus.notice(
                 "info",

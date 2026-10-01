@@ -66,6 +66,16 @@ export default function RunView() {
   return (
     <div className="flex flex-col h-full">
       <RunHeader run={run} paused={paused} setPaused={setPaused} />
+      {run.summary.error && run.status === "failed" && (
+        <div className="px-6 py-2.5 bg-bad-soft text-bad border-b border-bad/20 text-[12.5px] selectable">
+          <b>Run stopped:</b> {run.summary.error}
+        </div>
+      )}
+      {run.summary.restored && (
+        <div className="px-6 py-2 bg-info-soft text-info border-b border-info/20 text-[12.5px]">
+          Nothing was changed, so the workspace was put back on {run.base_ref ?? "its branch"}{run.summary.restored_stash ? " with your uncommitted changes restored" : ""}.
+        </div>
+      )}
       <Totals run={run} steps={steps} />
       <div className="flex-1 flex min-h-0">
         <div className="w-[360px] shrink-0 border-r border-line overflow-auto p-3 space-y-1">
@@ -359,6 +369,9 @@ function StepDetail({ run, step, paused }: { run: RunRow; step: StepRow; paused:
         </div>
         {step.route_reason && (
           <div className="text-[12px] text-muted flex gap-1.5"><Sparkles className="h-3.5 w-3.5 mt-0.5 text-accent shrink-0" /><span className="selectable">{step.route_reason}{step.detail.class_reason ? ` · ${step.detail.class_reason}` : ""}</span></div>
+        )}
+        {step.detail.agent_error && ["failed", "cancelled", "awaiting_approval"].includes(step.status) && (
+          <div className="text-[12.5px] selectable bg-bad-soft text-bad rounded-lg px-3 py-2 whitespace-pre-wrap">{step.detail.agent_error}</div>
         )}
         {step.detail.summary && <div className="text-[12.5px] selectable bg-panel-2 rounded-lg px-3 py-2">{step.detail.summary}</div>}
         {step.detail.changed && step.detail.changed.length > 0 && (

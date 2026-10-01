@@ -169,6 +169,8 @@ export interface RunSummary {
   review_verdict?: string;
   accepted?: boolean;
   error?: string;
+  restored?: boolean;
+  restored_stash?: boolean;
 }
 
 export interface RunRow {

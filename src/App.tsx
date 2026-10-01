@@ -5,6 +5,7 @@ import { StatusBar } from "./statusbar/StatusBar";
 import Home from "./home/Home";
 import { Spinner } from "./components/ui";
 import { Celebration } from "./components/Celebration";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Heavy screens load only when opened (CodeMirror, React Flow, charts).
 const RunView = lazy(() => import("./runs/RunView"));
@@ -56,9 +57,11 @@ export default function App() {
   }
   if (onboarding) {
     return (
-      <Suspense fallback={<Loading />}>
-        <Onboarding />
-      </Suspense>
+      <ErrorBoundary onHome={() => useApp.setState({ onboardingOpen: false })}>
+        <Suspense fallback={<Loading />}>
+          <Onboarding />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
   return (
@@ -68,6 +71,7 @@ export default function App() {
         <main className="flex-1 min-w-0 flex flex-col bg-bg">
           <Notices />
           <div className="flex-1 min-h-0">
+            <ErrorBoundary resetKey={screen} onHome={() => useApp.getState().go("home")}>
             <Suspense fallback={<Loading />}>
               {screen === "home" && <Home />}
               {screen === "run" && <RunView />}
@@ -77,6 +81,7 @@ export default function App() {
               {screen === "workflows" && <Workflows />}
               {screen === "settings" && <Settings />}
             </Suspense>
+            </ErrorBoundary>
           </div>
         </main>
       </div>

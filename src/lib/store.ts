@@ -71,6 +71,10 @@ interface State {
 
 let noticeId = 1;
 
+// The core always sends objects, but older rows may hold null; never let that crash a screen.
+const normRun = (r: T.RunRow): T.RunRow => (r.summary ? r : { ...r, summary: {} });
+const normStep = (s: T.StepRow): T.StepRow => (s.detail ? s : { ...s, detail: {} });
+
 const emptyBrand: T.Brand = { productName: "", shortName: "", handoffDirName: ".orchestrator", cliName: "orch" };
 
 export const useApp = create<State>((set, get) => ({
@@ -145,8 +149,9 @@ export const useApp = create<State>((set, get) => ({
   loadRun: async (runId) => {
     const d = await api.getRun(runId);
     set((s) => ({
-      runs: { ...s.runs, [runId]: d.run },
-      steps: { ...s.steps, [runId]: Object.fromEntries(d.steps.map((x) => [x.id, x])) },
+      // Live events are newer than this snapshot: keep anything they already delivered.
+      runs: { ...s.runs, [runId]: s.runs[runId] ?? normRun(d.run) },
+      steps: { ...s.steps, [runId]: { ...Object.fromEntries(d.steps.map((x) => [x.id, normStep(x)])), ...(s.steps[runId] ?? {}) } },
     }));
   },
   toast: (level, text, action) => {
@@ -177,7 +182,7 @@ export const useApp = create<State>((set, get) => ({
       switch (e.type) {
         case "run": {
           const prev = runs[e.run.id];
-          runs = { ...runs, [e.run.id]: e.run };
+          runs = { ...runs, [e.run.id]: normRun(e.run) };
           if (prev && prev.status !== "succeeded" && e.run.status === "succeeded") {
             try {
               if (!localStorage.getItem("celebrated")) {
@@ -191,7 +196,7 @@ export const useApp = create<State>((set, get) => ({
           break;
         }
         case "step": {
-          const r = { ...(steps[e.step.run_id] ?? {}), [e.step.id]: e.step };
+          const r = { ...(steps[e.step.run_id] ?? {}), [e.step.id]: normStep(e.step) };
           steps = { ...steps, [e.step.run_id]: r };
           break;
         }
