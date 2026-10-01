@@ -87,12 +87,10 @@ pub struct SysView {
 
 /// A cheap on-demand read of system state (memory + native signals).
 pub fn sys_view() -> SysView {
-    let mut s = sysinfo::System::new();
-    s.refresh_memory();
     let gb = 1_073_741_824.0;
     SysView {
-        total_gb: s.total_memory() as f64 / gb,
-        free_gb: s.available_memory() as f64 / gb,
+        total_gb: macos::total_memory_bytes() as f64 / gb,
+        free_gb: macos::available_memory_bytes() as f64 / gb,
         pressure: macos::pressure_now(),
         thermal: macos::thermal_now(),
         power: macos::power_source(),

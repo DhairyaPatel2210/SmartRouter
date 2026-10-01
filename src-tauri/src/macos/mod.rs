@@ -104,6 +104,17 @@ mod imp {
         sysctl_bytes("hw.memsize").and_then(|b| b.try_into().ok()).map(u64::from_ne_bytes).unwrap_or(0)
     }
 
+    /// Memory macOS considers available (free + reclaimable), from the
+    /// kernel's own "free percentage" (`kern.memorystatus_level`, the value
+    /// `memory_pressure` prints). `sysinfo`'s figure reads ~0 on macOS.
+    pub fn available_memory_bytes() -> u64 {
+        let pct = sysctl_bytes("kern.memorystatus_level")
+            .and_then(|b| b.get(..4).map(|s| i32::from_ne_bytes(s.try_into().unwrap())))
+            .filter(|p| (1..=100).contains(p))
+            .unwrap_or(0);
+        total_memory_bytes() / 100 * pct as u64
+    }
+
     pub fn pressure_now() -> Pressure {
         let v = sysctl_bytes("kern.memorystatus_vm_pressure_level")
             .and_then(|b| b.get(..4).map(|s| i32::from_ne_bytes(s.try_into().unwrap())))
@@ -247,6 +258,11 @@ mod imp {
         s.refresh_memory();
         s.total_memory()
     }
+    pub fn available_memory_bytes() -> u64 {
+        let mut s = sysinfo::System::new();
+        s.refresh_memory();
+        s.available_memory()
+    }
     pub fn pressure_now() -> Pressure {
         Pressure::Normal
     }
@@ -265,7 +281,10 @@ mod imp {
     }
 }
 
-pub use imp::{children, chip_name, low_power_mode, power_source, pressure_now, thermal_now, total_memory_bytes, watch_pressure};
+pub use imp::{
+    available_memory_bytes, children, chip_name, low_power_mode, power_source, pressure_now, thermal_now, total_memory_bytes,
+    watch_pressure,
+};
 
 /// All descendants of `pid` (inclusive), breadth-first, capped for safety.
 pub fn process_tree(pid: u32) -> Vec<u32> {
@@ -287,6 +306,9 @@ mod tests {
     fn reads_hardware_and_signals() {
         let h = hardware();
         assert!(h.total_mem_gb > 0.5);
+        let avail = available_memory_bytes();
+        assert!(avail > 100 * 1024 * 1024, "available memory should be real, got {avail}");
+        assert!(avail <= total_memory_bytes());
         assert!(!h.chip.is_empty());
         let _ = pressure_now();
         let _ = thermal_now();

@@ -169,7 +169,7 @@ impl Sampler {
             }
             let gb = 1_073_741_824.0;
             let total = sys.total_memory() as f64 / gb;
-            let avail = sys.available_memory() as f64 / gb;
+            let avail = macos::available_memory_bytes() as f64 / gb;
             (procs, app, (total, avail))
         };
 
