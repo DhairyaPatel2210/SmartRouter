@@ -94,7 +94,7 @@
       "bin": "opencode",
       "install": {
         "macos": [
-          { "label": "Homebrew", "command": "brew install sst/tap/opencode" },
+          { "label": "Homebrew", "command": "brew install opencode" },
           { "label": "npm", "command": "npm install -g opencode-ai" }
         ],
         "linux": [{ "label": "Official installer", "command": "curl -fsSL https://opencode.ai/install | bash" }],
