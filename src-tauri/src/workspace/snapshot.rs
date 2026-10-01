@@ -10,8 +10,25 @@ use std::path::{Path, PathBuf};
 
 /// Heavy or generated folders we never snapshot.
 pub const SKIP_DIRS: &[&str] = &[
-    ".git", "node_modules", "target", "dist", "build", ".next", ".nuxt", ".venv", "venv", "__pycache__", ".mypy_cache",
-    ".pytest_cache", ".gradle", ".idea", ".cache", "Pods", ".turbo", ".svelte-kit", "coverage",
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".gradle",
+    ".idea",
+    ".cache",
+    "Pods",
+    ".turbo",
+    ".svelte-kit",
+    "coverage",
 ];
 const MAX_FILE: u64 = 20 * 1024 * 1024;
 const MAX_TOTAL: u64 = 1024 * 1024 * 1024;

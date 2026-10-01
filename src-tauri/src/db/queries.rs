@@ -10,9 +10,8 @@ use serde::{Deserialize, Serialize};
 
 impl Db {
     pub fn get_setting<T: serde::de::DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
-        let v: Option<String> = self.with(|c| {
-            c.query_row("SELECT value_json FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional()
-        })?;
+        let v: Option<String> =
+            self.with(|c| c.query_row("SELECT value_json FROM settings WHERE key = ?1", [key], |r| r.get(0)).optional())?;
         Ok(match v {
             Some(s) => serde_json::from_str(&s).ok(),
             None => None,
@@ -74,8 +73,7 @@ fn ws_row(r: &Row) -> rusqlite::Result<WorkspaceRow> {
     })
 }
 
-const WS_COLS: &str =
-    "id, path, display_name, is_git, default_mode, library_profile_id, local_only, last_opened_at, pinned, settings_json";
+const WS_COLS: &str = "id, path, display_name, is_git, default_mode, library_profile_id, local_only, last_opened_at, pinned, settings_json";
 
 impl Db {
     pub fn upsert_workspace(&self, path: &str, display_name: &str, is_git: bool) -> Result<WorkspaceRow> {
@@ -92,9 +90,7 @@ impl Db {
     }
 
     pub fn workspace_by_path(&self, path: &str) -> Result<Option<WorkspaceRow>> {
-        self.with(|c| {
-            c.query_row(&format!("SELECT {WS_COLS} FROM workspaces WHERE path = ?1"), [path], ws_row).optional()
-        })
+        self.with(|c| c.query_row(&format!("SELECT {WS_COLS} FROM workspaces WHERE path = ?1"), [path], ws_row).optional())
     }
 
     pub fn workspace(&self, id: &str) -> Result<Option<WorkspaceRow>> {
@@ -104,9 +100,7 @@ impl Db {
     /// Pinned first, then most recent; capped to the recent list size.
     pub fn recent_workspaces(&self, limit: usize) -> Result<Vec<WorkspaceRow>> {
         self.with(|c| {
-            let mut st = c.prepare(&format!(
-                "SELECT {WS_COLS} FROM workspaces ORDER BY pinned DESC, last_opened_at DESC LIMIT ?1"
-            ))?;
+            let mut st = c.prepare(&format!("SELECT {WS_COLS} FROM workspaces ORDER BY pinned DESC, last_opened_at DESC LIMIT ?1"))?;
             let rows = st.query_map([limit as i64], ws_row)?.collect::<rusqlite::Result<Vec<_>>>();
             rows
         })
@@ -244,8 +238,20 @@ impl Db {
             c.execute(
                 &format!("INSERT OR REPLACE INTO runs ({RUN_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)"),
                 params![
-                    r.id, r.workspace_id, r.goal, r.mode, r.status, r.started_at, r.ended_at, r.est_cost_usd,
-                    r.peak_mem_mb, r.library_snapshot_hash, r.budget_planning, r.branch, r.base_ref, s
+                    r.id,
+                    r.workspace_id,
+                    r.goal,
+                    r.mode,
+                    r.status,
+                    r.started_at,
+                    r.ended_at,
+                    r.est_cost_usd,
+                    r.peak_mem_mb,
+                    r.library_snapshot_hash,
+                    r.budget_planning,
+                    r.branch,
+                    r.base_ref,
+                    s
                 ],
             )
         })?;
@@ -270,10 +276,7 @@ impl Db {
     /// Runs left non-terminal by a crash or force-quit are marked failed on start.
     pub fn fail_orphan_runs(&self) -> Result<usize> {
         let n = self.with(|c| {
-            c.execute(
-                "UPDATE runs SET status='failed', ended_at=?1 WHERE status NOT IN ('succeeded','failed','cancelled')",
-                [now_ms()],
-            )
+            c.execute("UPDATE runs SET status='failed', ended_at=?1 WHERE status NOT IN ('succeeded','failed','cancelled')", [now_ms()])
         })?;
         self.with(|c| {
             c.execute(
@@ -294,10 +297,29 @@ impl Db {
                      (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)"
                 ),
                 params![
-                    s.id, s.run_id, s.idx, s.title, s.class, s.kind, s.agent_id, s.model_id, s.tier,
-                    s.library_agent_id, s.status, s.attempts, s.escalated, s.route_reason, s.tokens_in,
-                    s.tokens_out, s.tokens_estimated, s.cost_usd, s.paid_equiv_usd, s.commit_ref, s.started_at,
-                    s.ended_at, d
+                    s.id,
+                    s.run_id,
+                    s.idx,
+                    s.title,
+                    s.class,
+                    s.kind,
+                    s.agent_id,
+                    s.model_id,
+                    s.tier,
+                    s.library_agent_id,
+                    s.status,
+                    s.attempts,
+                    s.escalated,
+                    s.route_reason,
+                    s.tokens_in,
+                    s.tokens_out,
+                    s.tokens_estimated,
+                    s.cost_usd,
+                    s.paid_equiv_usd,
+                    s.commit_ref,
+                    s.started_at,
+                    s.ended_at,
+                    d
                 ],
             )
         })?;
@@ -373,8 +395,7 @@ impl Db {
 
     pub fn metrics_since(&self, since: i64) -> Result<Vec<MetricRow>> {
         self.with(|c| {
-            let mut st =
-                c.prepare("SELECT ts, target, rss_mb, cpu_pct, vram_mb FROM metrics WHERE ts >= ?1 ORDER BY ts")?;
+            let mut st = c.prepare("SELECT ts, target, rss_mb, cpu_pct, vram_mb FROM metrics WHERE ts >= ?1 ORDER BY ts")?;
             let rows = st
                 .query_map([since], |r| {
                     Ok(MetricRow { ts: r.get(0)?, target: r.get(1)?, rss_mb: r.get(2)?, cpu_pct: r.get(3)?, vram_mb: r.get(4)? })
@@ -445,9 +466,26 @@ mod tests {
     #[test]
     fn runs_and_steps_roundtrip() {
         let db = Db::open_memory().unwrap();
-        let run = RunRow { id: "r".into(), workspace_id: "w".into(), goal: "g".into(), mode: "balanced".into(), status: "running".into(), started_at: 1, ..Default::default() };
+        let run = RunRow {
+            id: "r".into(),
+            workspace_id: "w".into(),
+            goal: "g".into(),
+            mode: "balanced".into(),
+            status: "running".into(),
+            started_at: 1,
+            ..Default::default()
+        };
         db.insert_run(&run).unwrap();
-        let step = StepRow { id: "s".into(), run_id: "r".into(), idx: 1, title: "t".into(), class: "low".into(), kind: "execute".into(), status: "pending".into(), ..Default::default() };
+        let step = StepRow {
+            id: "s".into(),
+            run_id: "r".into(),
+            idx: 1,
+            title: "t".into(),
+            class: "low".into(),
+            kind: "execute".into(),
+            status: "pending".into(),
+            ..Default::default()
+        };
         db.save_step(&step).unwrap();
         assert_eq!(db.steps("r").unwrap().len(), 1);
         assert_eq!(db.fail_orphan_runs().unwrap(), 1);
@@ -518,7 +556,9 @@ impl Db {
 
     pub fn agents(&self) -> Result<Vec<AgentRow>> {
         self.with(|c| {
-            let mut st = c.prepare("SELECT id, display_name, kind, cli, version, install_path, auth_ok, enabled, supports_local_models FROM agents")?;
+            let mut st = c.prepare(
+                "SELECT id, display_name, kind, cli, version, install_path, auth_ok, enabled, supports_local_models FROM agents",
+            )?;
             let rows = st
                 .query_map([], |r| {
                     Ok(AgentRow {
@@ -563,7 +603,9 @@ impl Db {
 
     pub fn providers(&self) -> Result<Vec<ProviderRow>> {
         self.with(|c| {
-            let mut st = c.prepare("SELECT id, display_name, type, base_url, key_ref, enabled, monthly_cap_usd FROM providers ORDER BY display_name")?;
+            let mut st = c.prepare(
+                "SELECT id, display_name, type, base_url, key_ref, enabled, monthly_cap_usd FROM providers ORDER BY display_name",
+            )?;
             let rows = st
                 .query_map([], |r| {
                     Ok(ProviderRow {
@@ -596,8 +638,21 @@ impl Db {
                  quant, ctx_len, tool_calling, price_in_per_m, price_out_per_m, path, installed)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
                 params![
-                    m.id, m.display_name, m.provider_id, m.runtime_id, m.name, m.tier, m.size_gb, m.mem_needed_gb, m.quant,
-                    m.ctx_len, m.tool_calling, m.price_in_per_m, m.price_out_per_m, m.path, m.installed
+                    m.id,
+                    m.display_name,
+                    m.provider_id,
+                    m.runtime_id,
+                    m.name,
+                    m.tier,
+                    m.size_gb,
+                    m.mem_needed_gb,
+                    m.quant,
+                    m.ctx_len,
+                    m.tool_calling,
+                    m.price_in_per_m,
+                    m.price_out_per_m,
+                    m.path,
+                    m.installed
                 ],
             )
         })?;
@@ -667,7 +722,9 @@ impl Db {
 
     pub fn save_profile(&self, id: &str, name: &str, items: &[String]) -> Result<()> {
         let j = serde_json::to_string(items)?;
-        self.with(|c| c.execute("INSERT OR REPLACE INTO library_profiles (id, display_name, item_ids_json) VALUES (?1,?2,?3)", params![id, name, j]))?;
+        self.with(|c| {
+            c.execute("INSERT OR REPLACE INTO library_profiles (id, display_name, item_ids_json) VALUES (?1,?2,?3)", params![id, name, j])
+        })?;
         Ok(())
     }
 

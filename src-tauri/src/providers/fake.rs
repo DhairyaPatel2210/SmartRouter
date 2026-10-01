@@ -97,15 +97,12 @@ async fn chat(sock: &mut TcpStream, req: &serde_json::Value) -> std::io::Result<
     let model = req.get("model").and_then(|m| m.as_str()).unwrap_or("fake-coder").to_string();
     let messages = req.get("messages").and_then(|m| m.as_array()).cloned().unwrap_or_default();
     let had_tool_result = messages.iter().any(|m| m.get("role").and_then(|r| r.as_str()) == Some("tool"));
-    let write_tool = req
-        .get("tools")
-        .and_then(|t| t.as_array())
-        .and_then(|tools| {
-            tools.iter().find_map(|t| {
-                let name = t.pointer("/function/name").and_then(|n| n.as_str())?;
-                (name == "write" || name == "write_file" || name == "Write").then(|| name.to_string())
-            })
-        });
+    let write_tool = req.get("tools").and_then(|t| t.as_array()).and_then(|tools| {
+        tools.iter().find_map(|t| {
+            let name = t.pointer("/function/name").and_then(|n| n.as_str())?;
+            (name == "write" || name == "write_file" || name == "Write").then(|| name.to_string())
+        })
+    });
     let cwd = messages.iter().find_map(|m| {
         let c = m.get("content")?.as_str()?;
         let i = c.find("Working directory: ")?;
@@ -192,10 +189,8 @@ async fn read_request(sock: &mut TcpStream) -> std::io::Result<Option<Request>> 
     let mut parts = first.split_whitespace();
     let method = parts.next().unwrap_or("").to_string();
     let path = parts.next().unwrap_or("").to_string();
-    let headers: Vec<(String, String)> = lines
-        .filter_map(|l| l.split_once(':'))
-        .map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string()))
-        .collect();
+    let headers: Vec<(String, String)> =
+        lines.filter_map(|l| l.split_once(':')).map(|(k, v)| (k.trim().to_ascii_lowercase(), v.trim().to_string())).collect();
     let len: usize = headers.iter().find(|(k, _)| k == "content-length").and_then(|(_, v)| v.parse().ok()).unwrap_or(0);
     let mut body = buf[header_end..].to_vec();
     while body.len() < len {
@@ -215,9 +210,6 @@ async fn respond(sock: &mut TcpStream, code: u16, ctype: &str, body: &str) -> st
         404 => "Not Found",
         _ => "Error",
     };
-    let msg = format!(
-        "HTTP/1.1 {code} {reason}\r\ncontent-type: {ctype}\r\ncontent-length: {}\r\n\r\n{body}",
-        body.len()
-    );
+    let msg = format!("HTTP/1.1 {code} {reason}\r\ncontent-type: {ctype}\r\ncontent-length: {}\r\n\r\n{body}", body.len());
     sock.write_all(msg.as_bytes()).await
 }

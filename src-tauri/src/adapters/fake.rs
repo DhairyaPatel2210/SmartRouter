@@ -36,9 +36,7 @@ impl Fake {
 
 /// Binary that implements `--fake-agent`: `ORCH_FAKE_AGENT_BIN` (tests) or this app.
 pub fn fake_bin() -> Option<String> {
-    std::env::var("ORCH_FAKE_AGENT_BIN")
-        .ok()
-        .or_else(|| std::env::current_exe().ok().map(|p| p.to_string_lossy().into_owned()))
+    std::env::var("ORCH_FAKE_AGENT_BIN").ok().or_else(|| std::env::current_exe().ok().map(|p| p.to_string_lossy().into_owned()))
 }
 
 pub struct FakeSpec;

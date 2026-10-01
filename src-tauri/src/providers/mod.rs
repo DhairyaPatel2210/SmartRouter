@@ -95,7 +95,14 @@ pub async fn list_models(p: ProviderType, base_url: &str, key: Option<&str>) -> 
             .flatten()
             .filter_map(|m| {
                 let id = m.get("name")?.as_str()?.to_string();
-                Some(CloudModel { name: id.clone(), id, ctx_len: None, price_in_per_m: Some(0.0), price_out_per_m: Some(0.0), tool_calling: None })
+                Some(CloudModel {
+                    name: id.clone(),
+                    id,
+                    ctx_len: None,
+                    price_in_per_m: Some(0.0),
+                    price_out_per_m: Some(0.0),
+                    tool_calling: None,
+                })
             })
             .collect());
     }
@@ -111,10 +118,8 @@ pub async fn list_models(p: ProviderType, base_url: &str, key: Option<&str>) -> 
         .filter_map(|m| {
             let id = m.get("id")?.as_str()?.to_string();
             let name = m.get("name").or_else(|| m.get("display_name")).and_then(|n| n.as_str()).unwrap_or(&id).to_string();
-            let tool_calling = m
-                .get("supported_parameters")
-                .and_then(|s| s.as_array())
-                .map(|a| a.iter().any(|x| x.as_str() == Some("tools")));
+            let tool_calling =
+                m.get("supported_parameters").and_then(|s| s.as_array()).map(|a| a.iter().any(|x| x.as_str() == Some("tools")));
             Some(CloudModel {
                 ctx_len: m.get("context_length").or_else(|| m.get("context_window")).and_then(|c| c.as_u64()).map(|c| c as u32),
                 price_in_per_m: per_m(m.pointer("/pricing/prompt")),

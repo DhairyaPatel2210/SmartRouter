@@ -140,11 +140,8 @@ pub fn parse_plan(md: &str) -> Vec<PlanTask> {
             continue;
         }
         if let Some(f) = field(t, &["files:", "files", "file:"]) {
-            cur.files = f
-                .split(',')
-                .map(|x| x.trim().trim_matches('`').to_string())
-                .filter(|x| !x.is_empty() && x != "none" && x != "-")
-                .collect();
+            cur.files =
+                f.split(',').map(|x| x.trim().trim_matches('`').to_string()).filter(|x| !x.is_empty() && x != "none" && x != "-").collect();
         } else if let Some(c) = field(t, &["check:", "acceptance check:", "acceptance:", "test:", "verify:"]) {
             // Only a backticked command counts; prose like "tests pass" isn't runnable.
             cur.check = backticked(c);

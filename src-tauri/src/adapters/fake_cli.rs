@@ -122,16 +122,9 @@ pub fn main(args: &[String]) -> i32 {
 }
 
 fn plan(cwd: &Path, handoff: &str, prompt: &str, sc: &Scenario) -> i32 {
-    let steps: usize = sc
-        .steps
-        .or_else(|| std::env::var("FAKE_PLAN_STEPS").ok().and_then(|v| v.parse().ok()))
-        .unwrap_or(3)
-        .clamp(1, PLAN_TASKS.len());
-    let goal = prompt
-        .lines()
-        .find_map(|l| l.strip_prefix("Goal: "))
-        .unwrap_or("the goal")
-        .to_string();
+    let steps: usize =
+        sc.steps.or_else(|| std::env::var("FAKE_PLAN_STEPS").ok().and_then(|v| v.parse().ok())).unwrap_or(3).clamp(1, PLAN_TASKS.len());
+    let goal = prompt.lines().find_map(|l| l.strip_prefix("Goal: ")).unwrap_or("the goal").to_string();
     let mut body = format!("# Plan\n\nGoal: {goal}\n\n");
     for t in &PLAN_TASKS[..steps] {
         body.push_str(t);

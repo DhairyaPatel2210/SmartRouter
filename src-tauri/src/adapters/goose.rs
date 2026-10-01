@@ -42,7 +42,9 @@ impl CliSpec for Goose {
                 _ => {
                     // Goose's OpenAI provider accepts a custom host + base path.
                     let (host, path) = split_base(&base);
-                    cmd.env("GOOSE_PROVIDER", "openai").env("OPENAI_HOST", host).env("OPENAI_BASE_PATH", format!("{path}/chat/completions"));
+                    cmd.env("GOOSE_PROVIDER", "openai")
+                        .env("OPENAI_HOST", host)
+                        .env("OPENAI_BASE_PATH", format!("{path}/chat/completions"));
                     cmd.env("OPENAI_API_KEY", req.api_key.as_deref().unwrap_or("local"));
                 }
             }

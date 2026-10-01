@@ -179,9 +179,8 @@ pub fn parse_item(path: &Path, kind: Kind, scope: Scope) -> Result<Item> {
         Kind::Skill => path.parent().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
         _ => path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
     };
-    let display_name = get_str(&meta, "displayName")
-        .or_else(|| get_str(&meta, "name").filter(|_| kind != Kind::Skill))
-        .unwrap_or_else(|| humanize(&id));
+    let display_name =
+        get_str(&meta, "displayName").or_else(|| get_str(&meta, "name").filter(|_| kind != Kind::Skill)).unwrap_or_else(|| humanize(&id));
     let updated_at = std::fs::metadata(path)
         .and_then(|m| m.modified())
         .ok()

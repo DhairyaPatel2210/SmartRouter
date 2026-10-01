@@ -47,8 +47,16 @@ impl CliSpec for Aider {
     }
     fn build(&self, req: &StepRequest, cmd: &mut Command) -> Result<()> {
         cmd.args([
-            "--message", &req.prompt, "--yes-always", "--no-auto-commits", "--no-pretty", "--no-stream",
-            "--no-check-update", "--no-show-model-warnings", "--no-analytics", "--no-gitignore",
+            "--message",
+            &req.prompt,
+            "--yes-always",
+            "--no-auto-commits",
+            "--no-pretty",
+            "--no-stream",
+            "--no-check-update",
+            "--no-show-model-warnings",
+            "--no-analytics",
+            "--no-gitignore",
         ]);
         if req.workspace.join("AGENTS.md").exists() {
             cmd.args(["--read", "AGENTS.md"]);

@@ -203,12 +203,7 @@ mod imp {
     pub fn watch_pressure(cb: impl Fn(Pressure) + Send + Sync + 'static) {
         unsafe {
             let q = dispatch_get_global_queue(QOS_CLASS_UTILITY, 0);
-            let src = dispatch_source_create(
-                &_dispatch_source_type_memorypressure as *const c_void,
-                0,
-                NORMAL | WARN | CRITICAL,
-                q,
-            );
+            let src = dispatch_source_create(&_dispatch_source_type_memorypressure as *const c_void, 0, NORMAL | WARN | CRITICAL, q);
             if src.is_null() {
                 return;
             }
@@ -227,7 +222,11 @@ mod imp {
     pub fn children(pid: u32) -> Vec<u32> {
         let mut buf = vec![0 as libc::pid_t; 256];
         let n = unsafe {
-            proc_listchildpids(pid as libc::pid_t, buf.as_mut_ptr() as *mut c_void, (buf.len() * std::mem::size_of::<libc::pid_t>()) as libc::c_int)
+            proc_listchildpids(
+                pid as libc::pid_t,
+                buf.as_mut_ptr() as *mut c_void,
+                (buf.len() * std::mem::size_of::<libc::pid_t>()) as libc::c_int,
+            )
         };
         if n <= 0 {
             return vec![];
@@ -304,5 +303,6 @@ mod tests {
         let tree = process_tree(me);
         assert!(tree.contains(&child.id()), "{tree:?}");
         child.kill().ok();
+        child.wait().ok();
     }
 }

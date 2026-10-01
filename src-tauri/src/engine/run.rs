@@ -119,10 +119,7 @@ pub async fn execute(core: Arc<Core>, ctl: Arc<RunCtl>, opts: StartOpts) {
     let saved = run.summary.get("saved_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let passed = run.summary.get("steps_passed").and_then(|v| v.as_u64()).unwrap_or(0);
     let total = run.summary.get("steps_total").and_then(|v| v.as_u64()).unwrap_or(0);
-    core.notify(
-        &format!("Run {}", status),
-        &format!("{passed}/{total} steps passed · est. ${:.2} (saved ${saved:.2})", run.est_cost_usd),
-    );
+    core.notify(&format!("Run {}", status), &format!("{passed}/{total} steps passed · est. ${:.2} (saved ${saved:.2})", run.est_cost_usd));
 }
 
 fn finish_cancelled_early(core: &Core, ctl: &RunCtl) {
@@ -249,7 +246,11 @@ async fn run_inner(core: &Arc<Core>, ctl: &Arc<RunCtl>, opts: &StartOpts) -> Res
                     let msg = format!("{}: saved before run {}", brand::SHORT_NAME, short(&ctl.run_id));
                     git::stash(&ws, &msg).await?;
                     run.summary["stashed"] = serde_json::json!(msg);
-                    core.bus.notice("info", format!("Stashed {} uncommitted change(s). Restore them from the run summary.", dirty.len()), Some(&ctl.run_id));
+                    core.bus.notice(
+                        "info",
+                        format!("Stashed {} uncommitted change(s). Restore them from the run summary.", dirty.len()),
+                        Some(&ctl.run_id),
+                    );
                 }
                 DirtyStrategy::Commit => {
                     git::commit_all(&ws, &format!("WIP: save work before {} run", brand::SHORT_NAME)).await?;
@@ -273,7 +274,8 @@ async fn run_inner(core: &Arc<Core>, ctl: &Arc<RunCtl>, opts: &StartOpts) -> Res
 
     // ---- 2. Sync the Library into every installed CLI ----
     let items = library::list(&core.data_dir, Some(&ws));
-    let profile = ws_row.library_profile_id.as_ref().and_then(|pid| core.db.profiles().ok()?.into_iter().find(|p| &p.0 == pid).map(|p| p.2));
+    let profile =
+        ws_row.library_profile_id.as_ref().and_then(|pid| core.db.profiles().ok()?.into_iter().find(|p| &p.0 == pid).map(|p| p.2));
     let resolved = library::resolve(&items, profile.as_deref());
     run.library_snapshot_hash = Some(library::snapshot_hash(&resolved));
     let targets = core.sync_targets();
@@ -281,7 +283,15 @@ async fn run_inner(core: &Arc<Core>, ctl: &Arc<RunCtl>, opts: &StartOpts) -> Res
     let report = sync::apply(&ws, &sync::plan(&resolved, &target_refs), &target_refs, ws_row.settings.commit_generated)?;
     if !report.conflicts.is_empty() {
         let list: Vec<String> = report.conflicts.iter().map(|c| format!("{} ({})", c.path, c.reason)).collect();
-        core.bus.notice("warn", format!("Library sync left {} file(s) untouched because you edited them: {}. Import them from the Library screen.", list.len(), list.join(", ")), Some(&ctl.run_id));
+        core.bus.notice(
+            "warn",
+            format!(
+                "Library sync left {} file(s) untouched because you edited them: {}. Import them from the Library screen.",
+                list.len(),
+                list.join(", ")
+            ),
+            Some(&ctl.run_id),
+        );
     }
     if matches!(rewind, Rewind::Git) {
         git::commit_all(&ws, &format!("chore: sync {} library", brand::SHORT_NAME)).await?;
@@ -357,7 +367,12 @@ async fn plan(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState) -> Result<
             match router::route_step(
                 &router::Classified { class: StepClass::Low, reason: "planning".into(), hard_rule: false },
                 None,
-                &RouteEnv { mode: ModeDef { low: Exec::Cheap, ..mode.clone() }, paid_agent: None, budget_planner: None, pool: env.pool.clone() },
+                &RouteEnv {
+                    mode: ModeDef { low: Exec::Cheap, ..mode.clone() },
+                    paid_agent: None,
+                    budget_planner: None,
+                    pool: env.pool.clone(),
+                },
             ) {
                 Ok(mut d) => {
                     d.reason = "no paid agent: the cheap executor plans (turn on budget planning for a stronger planner)".into();
@@ -385,7 +400,11 @@ async fn plan(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState) -> Result<
         .library
         .iter()
         .filter(|i| i.kind == library::Kind::Agent)
-        .map(|a| handoff::AgentBrief { id: a.id.clone(), description: a.description.clone(), tier: a.tier.clone().unwrap_or_else(|| "any".into()) })
+        .map(|a| handoff::AgentBrief {
+            id: a.id.clone(),
+            description: a.description.clone(),
+            tier: a.tier.clone().unwrap_or_else(|| "any".into()),
+        })
         .collect();
     let hints = workspace_hints(&st.ws, &st.checks);
     let prompt = handoff::planning_prompt(&st.run.goal, mode.short_plan, &agents, &hints);
@@ -427,7 +446,11 @@ async fn plan(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState) -> Result<
     // Create and pre-route every step so the user sees (and can change) assignments up front.
     for t in &tasks {
         let c = router::classify(t, &mode);
-        let hint = t.agent.as_ref().and_then(|id| st.library.iter().find(|i| i.kind == library::Kind::Agent && &i.id == id)).and_then(|a| a.tier.clone());
+        let hint = t
+            .agent
+            .as_ref()
+            .and_then(|id| st.library.iter().find(|i| i.kind == library::Kind::Agent && &i.id == id))
+            .and_then(|a| a.tier.clone());
         let mut s = StepRow {
             id: uuid::Uuid::new_v4().to_string(),
             run_id: ctl.run_id.clone(),
@@ -455,7 +478,12 @@ async fn plan(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState) -> Result<
 
 fn env_paid(env: &RouteEnv, what: &str) -> Result<RouteDecision> {
     let c = router::Classified { class: StepClass::High, reason: what.into(), hard_rule: true };
-    let paid_env = RouteEnv { mode: ModeDef { high: Exec::Paid, ..env.mode.clone() }, paid_agent: env.paid_agent.clone(), budget_planner: env.budget_planner.clone(), pool: vec![] };
+    let paid_env = RouteEnv {
+        mode: ModeDef { high: Exec::Paid, ..env.mode.clone() },
+        paid_agent: env.paid_agent.clone(),
+        budget_planner: env.budget_planner.clone(),
+        pool: vec![],
+    };
     let mut d = router::route_step(&c, None, &paid_env).map_err(|e| anyhow!(e))?;
     d.reason = if env.budget_planner.is_some() { format!("{what} by the budget planner") } else { format!("{what} by the paid agent") };
     Ok(d)
@@ -485,7 +513,11 @@ pub async fn reroute_pending(core: &Arc<Core>, ctl: &RunCtl) {
         if s.kind != "execute" || s.status != "pending" || overrides.contains_key(&s.id) {
             continue;
         }
-        let t = PlanTask { title: s.title.clone(), files: serde_json::from_value(s.detail["files"].clone()).unwrap_or_default(), ..Default::default() };
+        let t = PlanTask {
+            title: s.title.clone(),
+            files: serde_json::from_value(s.detail["files"].clone()).unwrap_or_default(),
+            ..Default::default()
+        };
         let c = router::classify(&t, &mode);
         s.class = c.class.to_string();
         if let Ok(d) = router::route_step(&c, None, &env) {
@@ -521,7 +553,10 @@ async fn check_budget(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState) ->
                 kind: "budget".into(),
                 title: "Budget cap reached".into(),
                 body: format!("This run paused because {reason}. Continue anyway?"),
-                options: vec![ApprovalOption::new("continue", "Continue this run").primary(), ApprovalOption::new("stop", "Stop here").danger()],
+                options: vec![
+                    ApprovalOption::new("continue", "Continue this run").primary(),
+                    ApprovalOption::new("stop", "Stop here").danger(),
+                ],
             },
         )
         .await;
@@ -592,7 +627,10 @@ async fn approve_executor(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState
                 kind: if d.tier == Tier::Premium { "paid".into() } else { "cloud".into() },
                 title: format!("Run \"{}\" on {label}?", step.title),
                 body: format!("You asked to approve every {what} call. {}", d.reason),
-                options: vec![ApprovalOption::new("run", format!("Run on {label}")).primary(), ApprovalOption::new("stop", "Stop run").danger()],
+                options: vec![
+                    ApprovalOption::new("run", format!("Run on {label}")).primary(),
+                    ApprovalOption::new("stop", "Stop run").danger(),
+                ],
             },
         )
         .await;
@@ -642,11 +680,14 @@ async fn run_agent(
     save_step(core, step);
     core.logs.open(&ctl.run_id, &step.id, step.idx);
     let label = exec_label(core, d);
-    *ctl.label.lock() = Some(format!("{label} ({})", match d.tier {
-        Tier::Local => "local",
-        Tier::CheapCloud => "cheap cloud",
-        Tier::Premium => "premium",
-    }));
+    *ctl.label.lock() = Some(format!(
+        "{label} ({})",
+        match d.tier {
+            Tier::Local => "local",
+            Tier::CheapCloud => "cheap cloud",
+            Tier::Premium => "premium",
+        }
+    ));
     event(core, &ctl.run_id, &step.id, "route", &format!("Attempt {} on {label}: {}", step.attempts, d.reason));
     if is_local {
         ctl.local_step.store(true, Ordering::SeqCst);
@@ -654,7 +695,8 @@ async fn run_agent(
     }
 
     let acc = Arc::new(Mutex::new(Acc::default()));
-    let (c2, run_id, step_id, ws, acc2, ctl2) = (core.clone(), ctl.run_id.clone(), step.id.clone(), st.ws.clone(), acc.clone(), ctl.clone());
+    let (c2, run_id, step_id, ws, acc2, ctl2) =
+        (core.clone(), ctl.run_id.clone(), step.id.clone(), st.ws.clone(), acc.clone(), ctl.clone());
     let cost_mode = st.settings.mode(&ctl.mode()).high == Exec::Cheap;
     let tx: crate::adapters::EventTx = Arc::new(move |e: AgentEvent| {
         let w = c2.db.writer();
@@ -737,9 +779,17 @@ async fn run_agent(
 
     // Tokens & cost (estimated from text length when the CLI doesn't report).
     let a = acc.lock();
-    let (tin, tout, estimated) = if a.saw_tokens { (a.tin, a.tout, false) } else { (cost::estimate_tokens(prompt.len()), cost::estimate_tokens(a.stdout_chars), true) };
+    let (tin, tout, estimated) = if a.saw_tokens {
+        (a.tin, a.tout, false)
+    } else {
+        (cost::estimate_tokens(prompt.len()), cost::estimate_tokens(a.stdout_chars), true)
+    };
     let price = st.settings.agent_prices.get(&d.agent_id).cloned();
-    let step_cost = if d.tier == Tier::Premium && a.reported_cost > 0.0 { a.reported_cost } else { cost::step_cost(d.tier, price.as_ref(), d.model.as_ref(), tin, tout) };
+    let step_cost = if d.tier == Tier::Premium && a.reported_cost > 0.0 {
+        a.reported_cost
+    } else {
+        cost::step_cost(d.tier, price.as_ref(), d.model.as_ref(), tin, tout)
+    };
     step.tokens_in += tin as i64;
     step.tokens_out += tout as i64;
     step.tokens_estimated |= estimated;
@@ -785,15 +835,19 @@ async fn prepare_local(core: &Arc<Core>, ctl: &Arc<RunCtl>, step: &StepRow, d: &
     let client = core.ollama.client();
     // One local model at a time: unload others first, and say so.
     for other in client.ps().await.unwrap_or_default() {
-        if other.name != m.name {
-            if client.unload(&other.name).await.is_ok() {
+        if other.name != m.name && client.unload(&other.name).await.is_ok() {
+            {
                 core.governor.state.lock().loaded_by_app.remove(&other.name);
                 event(
                     core,
                     &ctl.run_id,
                     &step.id,
                     "governor",
-                    &format!("Unloaded {} ({:.1} GB) so only one local model is in memory.", other.name, other.size as f64 / 1_073_741_824.0),
+                    &format!(
+                        "Unloaded {} ({:.1} GB) so only one local model is in memory.",
+                        other.name,
+                        other.size as f64 / 1_073_741_824.0
+                    ),
                 );
             }
         }
@@ -852,7 +906,8 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
     let task = st.tasks[i].clone();
     let total = st.tasks.len();
     let step_pos = st.steps.iter().position(|s| s.kind == "execute" && s.idx == task.n).ok_or_else(|| anyhow!("step row missing"))?;
-    let mut step = core.db.steps(&ctl.run_id)?.into_iter().find(|s| s.id == st.steps[step_pos].id).unwrap_or_else(|| st.steps[step_pos].clone());
+    let mut step =
+        core.db.steps(&ctl.run_id)?.into_iter().find(|s| s.id == st.steps[step_pos].id).unwrap_or_else(|| st.steps[step_pos].clone());
     let base = step_base(st, i).await;
     let mut failure_notes: Option<String> = None;
     let mut on_executor = 0u32;
@@ -865,7 +920,10 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
         Some(a) => decision_from_assignment(a, core),
         None => {
             let c = router::classify(&task, &mode);
-            let hint = library_agent.as_ref().and_then(|id| st.library.iter().find(|x| x.kind == library::Kind::Agent && &x.id == id)).and_then(|a| a.tier.clone());
+            let hint = library_agent
+                .as_ref()
+                .and_then(|id| st.library.iter().find(|x| x.kind == library::Kind::Agent && &x.id == id))
+                .and_then(|a| a.tier.clone());
             match router::route_step(&c, hint.as_deref(), &env) {
                 Ok(d) => d,
                 Err(e) => {
@@ -888,7 +946,11 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
                     kind: "escalate".into(),
                     title: format!("Use the paid agent for \"{}\"?", task.title),
                     body: decision.reason.clone(),
-                    options: vec![ApprovalOption::new("run", format!("Use {}", exec_label(core, &decision))).primary(), ApprovalOption::new("skip", "Skip step"), ApprovalOption::new("stop", "Stop run").danger()],
+                    options: vec![
+                        ApprovalOption::new("run", format!("Use {}", exec_label(core, &decision))).primary(),
+                        ApprovalOption::new("skip", "Skip step"),
+                        ApprovalOption::new("stop", "Stop run").danger(),
+                    ],
                 },
             )
             .await;
@@ -925,7 +987,8 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
             },
         )?;
         let prompt = handoff::execute_prompt(&st.ws, &task_file);
-        let native_agent = library_agent.clone().filter(|_| sync::support(&decision.agent_id, library::Kind::Agent) == sync::Support::Native);
+        let native_agent =
+            library_agent.clone().filter(|_| sync::support(&decision.agent_id, library::Kind::Agent) == sync::Support::Native);
         on_executor += 1;
         let (result, _) = run_agent(core, ctl, st, &mut step, &decision, &task_file, prompt, native_agent).await?;
 
@@ -941,19 +1004,46 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
             options.push(ApprovalOption::new("retry", "Retry here"));
             options.push(ApprovalOption::new("skip", "Skip step"));
             options.push(ApprovalOption::new("stop", "Stop run").danger());
-            let (title, body) = if why.starts_with("scope:") {
-                (format!("Paused step {}: wrote outside the workspace", task.n), format!("The agent touched {}. The step's changes were rolled back.", &why[6..]))
+            let (title, body) = if let Some(path) = why.strip_prefix("scope:") {
+                (
+                    format!("Paused step {}: wrote outside the workspace", task.n),
+                    format!("The agent touched {path}. The step's changes were rolled back."),
+                )
             } else {
-                (format!("Paused step {}: {why}", task.n), "The local model was unloaded to keep your Mac responsive. The step's partial changes were rolled back.".to_string())
+                (
+                    format!("Paused step {}: {why}", task.n),
+                    "The local model was unloaded to keep your Mac responsive. The step's partial changes were rolled back.".to_string(),
+                )
             };
             event(core, &ctl.run_id, &step.id, "governor", &title);
             step.status = StepStatus::AwaitingApproval.to_string();
             save_step(core, &step);
-            let a = core.ask(ctl, ApprovalRequest { id: String::new(), run_id: String::new(), step_id: Some(step.id.clone()), kind: if why.starts_with("scope:") { "scope".into() } else { "pressure".into() }, title, body, options }).await;
+            let a = core
+                .ask(
+                    ctl,
+                    ApprovalRequest {
+                        id: String::new(),
+                        run_id: String::new(),
+                        step_id: Some(step.id.clone()),
+                        kind: if why.starts_with("scope:") { "scope".into() } else { "pressure".into() },
+                        title,
+                        body,
+                        options,
+                    },
+                )
+                .await;
             match a.as_str() {
                 "cloud" => {
                     let c = cloud.unwrap();
-                    decision = RouteDecision { exec: Exec::Cheap, agent_id: c.agent_id.clone(), tier: c.model.tier, model: Some(c.model), reason: "moved to cloud after the local step was paused".into(), fallthrough: vec![], needs_approval: false };
+                    decision = RouteDecision {
+                        exec: Exec::Cheap,
+                        agent_id: c.agent_id.clone(),
+                        tier: c.model.tier,
+                        model: Some(c.model),
+                        reason: "moved to cloud after the local step was paused".into(),
+                        fallthrough: vec![],
+                        needs_approval: false,
+                    };
                     on_executor = 0;
                     continue;
                 }
@@ -982,16 +1072,29 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
             step.status = StepStatus::Verifying.to_string();
             save_step(core, &step);
             let (c2, rid, sid) = (core.clone(), ctl.run_id.clone(), step.id.clone());
-            let g = verify::run_checks(&st.ws, &checks, &core.registry, &step.id, &ctl.cancel, st.settings.lower_priority, move |cmd, line| {
-                let _ = cmd;
-                log(&c2, &rid, &sid, "check", line);
-            })
-            .await;
+            let g =
+                verify::run_checks(&st.ws, &checks, &core.registry, &step.id, &ctl.cancel, st.settings.lower_priority, move |cmd, line| {
+                    let _ = cmd;
+                    log(&c2, &rid, &sid, "check", line);
+                })
+                .await;
             for c in &g.checks {
-                event(core, &ctl.run_id, &step.id, "check", &format!("{} `{}` ({:.1}s)", if c.passed { "✓" } else { "✗" }, c.command, c.duration_ms as f64 / 1000.0));
+                event(
+                    core,
+                    &ctl.run_id,
+                    &step.id,
+                    "check",
+                    &format!("{} `{}` ({:.1}s)", if c.passed { "✓" } else { "✗" }, c.command, c.duration_ms as f64 / 1000.0),
+                );
             }
             if g.no_checks {
-                event(core, &ctl.run_id, &step.id, "check", "No check commands configured; step is unverified. Add checks in Settings → Workspace.");
+                event(
+                    core,
+                    &ctl.run_id,
+                    &step.id,
+                    "check",
+                    "No check commands configured; step is unverified. Add checks in Settings → Workspace.",
+                );
             }
             Some(g)
         } else {
@@ -1014,8 +1117,15 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
             step.detail["changed"] = serde_json::json!(changed.iter().take(50).collect::<Vec<_>>());
             step.detail["unverified"] = gate.as_ref().is_some_and(|g| g.no_checks).into();
             save_step(core, &step);
-            let files = if changed.is_empty() { "no file changes".to_string() } else { changed.iter().take(8).cloned().collect::<Vec<_>>().join(", ") };
-            handoff::append_progress(&st.ws, &format!("- Step {}: {} — {} ({}). Changed: {files}", task.n, task.title, agent, decision.tier))?;
+            let files = if changed.is_empty() {
+                "no file changes".to_string()
+            } else {
+                changed.iter().take(8).cloned().collect::<Vec<_>>().join(", ")
+            };
+            handoff::append_progress(
+                &st.ws,
+                &format!("- Step {}: {} — {} ({}). Changed: {files}", task.n, task.title, agent, decision.tier),
+            )?;
             st.steps[step_pos] = step;
             return Ok(StepEnd::Passed);
         }
@@ -1031,7 +1141,13 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
         let report = verify::failure_report(&task.title, step.attempts, gate.as_ref(), agent_error.as_deref(), &changed);
         handoff::write_failure(&st.ws, task.n, step.attempts, &report)?;
         failure_notes = Some(report);
-        event(core, &ctl.run_id, &step.id, "error", &format!("Attempt {} failed{}.", step.attempts, if agent_ok { " verification" } else { "" }));
+        event(
+            core,
+            &ctl.run_id,
+            &step.id,
+            "error",
+            &format!("Attempt {} failed{}.", step.attempts, if agent_ok { " verification" } else { "" }),
+        );
 
         if on_executor < mode.attempts_per_executor {
             rewind_to(st, &base).await?;
@@ -1050,7 +1166,9 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
                             step_id: Some(step.id.clone()),
                             kind: "escalate".into(),
                             title: format!("Step {} failed {} times. Escalate to {}?", task.n, step.attempts, exec_label(core, &next)),
-                            body: "Cost mode asks before using the paid agent. You can also keep the failed changes, skip the step or stop.".into(),
+                            body:
+                                "Cost mode asks before using the paid agent. You can also keep the failed changes, skip the step or stop."
+                                    .into(),
                             options: vec![
                                 ApprovalOption::new("escalate", format!("Escalate to {}", exec_label(core, &next))).primary(),
                                 ApprovalOption::new("accept", "Keep changes anyway"),
@@ -1121,7 +1239,14 @@ async fn execute_step(core: &Arc<Core>, ctl: &Arc<RunCtl>, st: &mut RunState, i:
     }
 }
 
-async fn accept_step(core: &Arc<Core>, st: &mut RunState, mut step: StepRow, pos: usize, task: &PlanTask, d: &RouteDecision) -> Result<StepEnd> {
+async fn accept_step(
+    core: &Arc<Core>,
+    st: &mut RunState,
+    mut step: StepRow,
+    pos: usize,
+    task: &PlanTask,
+    d: &RouteDecision,
+) -> Result<StepEnd> {
     let agent = exec_label(core, d);
     step.commit_ref = checkpoint(st, task.n, &format!("{} (accepted with failing checks)", task.title), &agent).await?;
     step.status = StepStatus::Accepted.to_string();
@@ -1143,7 +1268,10 @@ async fn skip_step(core: &Arc<Core>, st: &mut RunState, mut step: StepRow, base:
 
 /// Role, rules and skills to inject into the task file for CLIs that can't
 /// receive them natively.
-fn fallback_library(st: &RunState, cli: &str, library_agent: Option<&str>) -> (Option<String>, Vec<String>, Vec<(String, String, String)>) {
+/// (role, rules, skills as (name, description, path)).
+type Fallback = (Option<String>, Vec<String>, Vec<(String, String, String)>);
+
+fn fallback_library(st: &RunState, cli: &str, library_agent: Option<&str>) -> Fallback {
     let mut role = None;
     if let Some(id) = library_agent {
         if let Some(a) = st.library.iter().find(|i| i.kind == library::Kind::Agent && i.id == id) {
@@ -1152,7 +1280,11 @@ fn fallback_library(st: &RunState, cli: &str, library_agent: Option<&str>) -> (O
         }
     }
     let rules = if sync::support(cli, library::Kind::Rule) == sync::Support::Fallback {
-        st.library.iter().filter(|i| i.kind == library::Kind::Rule).map(|r| format!("- **{}**: {}", r.display_name, r.body.trim())).collect()
+        st.library
+            .iter()
+            .filter(|i| i.kind == library::Kind::Rule)
+            .map(|r| format!("- **{}**: {}", r.display_name, r.body.trim()))
+            .collect()
     } else {
         vec![]
     };
@@ -1242,12 +1374,15 @@ pub async fn rollback(core: &Arc<Core>, run_id: &str, idx: i64) -> Result<usize>
     let ws = core.db.workspace(&run.workspace_id)?.ok_or_else(|| anyhow!("workspace not found"))?;
     let ws_path = PathBuf::from(&ws.path);
     let steps = core.db.steps(run_id)?;
-    let prev = steps.iter().filter(|s| s.idx < idx && s.commit_ref.is_some() && s.kind != "plan").filter_map(|s| s.commit_ref.clone()).next_back();
+    let prev =
+        steps.iter().filter(|s| s.idx < idx && s.commit_ref.is_some() && s.kind != "plan").filter_map(|s| s.commit_ref.clone()).next_back();
     if let Some(branch) = &run.branch {
         if git::current_branch(&ws_path).await.as_deref() != Some(branch) {
             bail!("Switch back to {branch} to roll back this run.");
         }
-        let target = prev.or_else(|| run.summary.get("base_commit").and_then(|v| v.as_str()).map(String::from)).ok_or_else(|| anyhow!("no commit to roll back to"))?;
+        let target = prev
+            .or_else(|| run.summary.get("base_commit").and_then(|v| v.as_str()).map(String::from))
+            .ok_or_else(|| anyhow!("no commit to roll back to"))?;
         git::reset_hard(&ws_path, &target).await?;
     } else {
         let store = SnapshotStore::new(&core.data_dir, run_id);
@@ -1281,7 +1416,13 @@ pub async fn accept(core: &Arc<Core>, run_id: &str, merge: bool, restore_stash: 
     if let (Some(branch), Some(base)) = (run.branch.clone(), run.base_ref.clone()) {
         if merge {
             git::switch(&ws_path, &base).await?;
-            let r = crate::proc::output("git", &["merge", "--no-ff", "-m", &format!("Merge {branch} ({})", brand::PRODUCT_NAME), &branch], Some(&ws_path), Duration::from_secs(60)).await?;
+            let r = crate::proc::output(
+                "git",
+                &["merge", "--no-ff", "-m", &format!("Merge {branch} ({})", brand::PRODUCT_NAME), &branch],
+                Some(&ws_path),
+                Duration::from_secs(60),
+            )
+            .await?;
             if r.0 != 0 {
                 let _ = crate::proc::output("git", &["merge", "--abort"], Some(&ws_path), Duration::from_secs(20)).await;
                 git::switch(&ws_path, &branch).await.ok();

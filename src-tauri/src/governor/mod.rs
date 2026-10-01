@@ -178,7 +178,16 @@ pub fn preflight(local: Option<(&ModelRef, Option<f64>)>, already_loaded: bool, 
             f.label()
         )
     };
-    Preflight { fit: Some(f), line, model: Some(m.name.clone()), mem_needed_gb: Some(need), free_gb: sys.free_gb, budget_gb: budget, notes, sys }
+    Preflight {
+        fit: Some(f),
+        line,
+        model: Some(m.name.clone()),
+        mem_needed_gb: Some(need),
+        free_gb: sys.free_gb,
+        budget_gb: budget,
+        notes,
+        sys,
+    }
 }
 
 #[derive(Default)]
@@ -197,7 +206,15 @@ pub struct Governor {
 
 impl Governor {
     /// Why a local executor can't be used right now (`None` = allowed).
-    pub fn local_block_reason(&self, run_id: &str, m: &ModelRef, size_gb: Option<f64>, loaded: bool, settings: &Settings, sys: &SysView) -> Option<String> {
+    pub fn local_block_reason(
+        &self,
+        run_id: &str,
+        m: &ModelRef,
+        size_gb: Option<f64>,
+        loaded: bool,
+        settings: &Settings,
+        sys: &SysView,
+    ) -> Option<String> {
         if m.tier != Tier::Local {
             return None;
         }
@@ -261,7 +278,14 @@ mod tests {
     use super::*;
 
     fn sys(total: f64, free: f64) -> SysView {
-        SysView { total_gb: total, free_gb: free, pressure: Pressure::Normal, thermal: Thermal::Nominal, power: PowerSource::Ac, low_power: false }
+        SysView {
+            total_gb: total,
+            free_gb: free,
+            pressure: Pressure::Normal,
+            thermal: Thermal::Nominal,
+            power: PowerSource::Ac,
+            low_power: false,
+        }
     }
 
     fn model(mem: f64) -> ModelRef {

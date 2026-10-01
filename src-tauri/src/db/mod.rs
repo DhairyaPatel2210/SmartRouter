@@ -2,8 +2,8 @@
 //! plus a background [`Writer`] that batches high-volume inserts (events,
 //! metrics) so a streaming run never does one disk write per log line.
 
-mod schema;
 pub mod queries;
+mod schema;
 
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
@@ -17,10 +17,7 @@ pub const FLUSH_INTERVAL: Duration = Duration::from_millis(250);
 pub const FLUSH_MAX_ROWS: usize = 200;
 
 pub fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
 
 #[derive(Clone)]
@@ -187,12 +184,8 @@ fn write_batch(conn: &Connection, buf: &mut Vec<WriteOp>) {
     let res: rusqlite::Result<()> = (|| {
         let tx = conn.unchecked_transaction()?;
         {
-            let mut ev = tx.prepare_cached(
-                "INSERT INTO events (run_id, step_id, ts, type, payload_json) VALUES (?1, ?2, ?3, ?4, ?5)",
-            )?;
-            let mut me = tx.prepare_cached(
-                "INSERT INTO metrics (ts, target, rss_mb, cpu_pct, vram_mb) VALUES (?1, ?2, ?3, ?4, ?5)",
-            )?;
+            let mut ev = tx.prepare_cached("INSERT INTO events (run_id, step_id, ts, type, payload_json) VALUES (?1, ?2, ?3, ?4, ?5)")?;
+            let mut me = tx.prepare_cached("INSERT INTO metrics (ts, target, rss_mb, cpu_pct, vram_mb) VALUES (?1, ?2, ?3, ?4, ?5)")?;
             for op in buf.iter() {
                 match op {
                     WriteOp::Event { run_id, step_id, ts, kind, payload } => {

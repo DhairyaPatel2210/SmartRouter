@@ -29,13 +29,27 @@ use tokio::process::Command;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
-    Stdout { text: String },
-    ToolCall { name: String, detail: String },
-    FileEdit { path: String },
-    Tokens { input: u64, output: u64 },
+    Stdout {
+        text: String,
+    },
+    ToolCall {
+        name: String,
+        detail: String,
+    },
+    FileEdit {
+        path: String,
+    },
+    Tokens {
+        input: u64,
+        output: u64,
+    },
     /// Cost reported by the CLI itself (e.g. Claude Code's `total_cost_usd`).
-    Cost { usd: f64 },
-    Error { text: String },
+    Cost {
+        usd: f64,
+    },
+    Error {
+        text: String,
+    },
 }
 
 pub type EventTx = Arc<dyn Fn(AgentEvent) + Send + Sync>;
@@ -164,18 +178,15 @@ pub async fn run_cli(spec: &dyn CliSpec, registry: &ProcRegistry, label: &str, r
     spec.build(&req, &mut cmd)?;
     let mut st = ParseState::default();
     let emit = |e: AgentEvent| tx(e);
-    let exit = proc::run_streaming(
-        cmd,
-        RunOpts { registry, owner: &req.step_id, label, timeout: req.timeout, cancel: &req.cancel },
-        |s, line| {
+    let exit =
+        proc::run_streaming(cmd, RunOpts { registry, owner: &req.step_id, label, timeout: req.timeout, cancel: &req.cancel }, |s, line| {
             let line = strip_ansi(line);
             if line.trim().is_empty() {
                 return;
             }
             spec.parse(s, &line, &mut st, &emit);
-        },
-    )
-    .await?;
+        })
+        .await?;
     Ok(outcome_from(exit, st))
 }
 
@@ -298,7 +309,21 @@ pub fn truncate(s: &str, max: usize) -> String {
 
 pub fn is_edit_tool(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
-    matches!(n.as_str(), "edit" | "write" | "multiedit" | "notebookedit" | "patch" | "apply_patch" | "str_replace" | "create" | "writetoolcall" | "edittoolcall" | "write_file" | "edit_file")
+    matches!(
+        n.as_str(),
+        "edit"
+            | "write"
+            | "multiedit"
+            | "notebookedit"
+            | "patch"
+            | "apply_patch"
+            | "str_replace"
+            | "create"
+            | "writetoolcall"
+            | "edittoolcall"
+            | "write_file"
+            | "edit_file"
+    )
 }
 
 /// All adapters the app knows. Order = display order.

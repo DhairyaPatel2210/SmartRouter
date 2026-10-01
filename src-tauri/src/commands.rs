@@ -7,8 +7,8 @@ use crate::engine::{self, ApprovalRequest, Assignment, Core, StartOpts};
 use crate::governor::{self, service::OllamaStatus};
 use crate::installer::{self, catalog::os_key, HardwareCheck, Suggestion};
 use crate::library::{self, sync, Kind, Scope};
-use crate::providers::{self, keychain, CloudModel};
 use crate::proc::CancelToken;
+use crate::providers::{self, keychain, CloudModel};
 use crate::settings::Settings;
 use crate::telemetry::{sampler::Snapshot, LogLine, UiEvent};
 use crate::types::*;
@@ -71,6 +71,12 @@ pub fn bootstrap(s: S) -> Res<Bootstrap> {
 
 #[tauri::command]
 pub fn take_pending_open(s: S) -> Option<String> {
+    // The UI calls this at the end of boot: the app is interactive.
+    if std::env::var("ORCH_PERF").is_ok() {
+        if let Some(t) = crate::STARTED.get() {
+            println!("ORCH_READY {}", t.elapsed().as_millis());
+        }
+    }
     s.pending_open.lock().take()
 }
 
@@ -116,13 +122,27 @@ pub async fn scan(s: S<'_>) -> Res<ScanResult> {
     let suggestions = installer::suggestions(&c.catalog, &hw, &installed);
     let mut library_found = vec![];
     if let Some(home) = dirs::home_dir() {
-        for (p, what) in [(".claude/skills", "Claude skills"), (".claude/agents", "Claude agents"), (".cursor/rules", "Cursor rules"), (".codex/AGENTS.md", "Codex AGENTS.md")] {
+        for (p, what) in [
+            (".claude/skills", "Claude skills"),
+            (".claude/agents", "Claude agents"),
+            (".cursor/rules", "Cursor rules"),
+            (".codex/AGENTS.md", "Codex AGENTS.md"),
+        ] {
             if home.join(p).exists() {
                 library_found.push(what.to_string());
             }
         }
     }
-    Ok(ScanResult { agents, hardware: hw, ollama, local_models: local, runtimes, suggestions, library_found, elapsed_ms: t.elapsed().as_millis() as u64 })
+    Ok(ScanResult {
+        agents,
+        hardware: hw,
+        ollama,
+        local_models: local,
+        runtimes,
+        suggestions,
+        library_found,
+        elapsed_ms: t.elapsed().as_millis() as u64,
+    })
 }
 
 async fn detect_runtimes_inner() -> Vec<providers::DetectedRuntime> {
@@ -210,7 +230,11 @@ pub async fn sample_project(s: S<'_>) -> Res<OpenedWorkspace> {
 // ---------------------------------------------------------------- runs
 
 #[tauri::command]
-pub async fn preflight(s: S<'_>, workspace_id: Option<String>, pool_override: Option<Vec<ExecutorEntry>>) -> Res<engine::env::PreflightView> {
+pub async fn preflight(
+    s: S<'_>,
+    workspace_id: Option<String>,
+    pool_override: Option<Vec<ExecutorEntry>>,
+) -> Res<engine::env::PreflightView> {
     let ws = match &workspace_id {
         Some(id) => s.core.db.workspace(id).map_err(e)?,
         None => None,
@@ -300,9 +324,15 @@ pub async fn accept_run(s: S<'_>, run_id: String, merge: bool, restore_stash: bo
 pub fn export_run(s: S, run_id: String, path: String) -> Res<()> {
     let run = s.core.db.run(&run_id).map_err(e)?.ok_or("run not found")?;
     let steps = s.core.db.steps(&run_id).map_err(e)?;
-    let models: Vec<String> = steps.iter().filter_map(|x| x.model_id.clone().or(x.agent_id.clone())).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+    let models: Vec<String> = steps
+        .iter()
+        .filter_map(|x| x.model_id.clone().or(x.agent_id.clone()))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
     let events: Vec<_> = steps.iter().flat_map(|st| s.core.db.events_for_step(&st.id, 5000).unwrap_or_default()).collect();
-    let doc = serde_json::json!({ "exported_by": crate::brand::PRODUCT_NAME, "run": run, "steps": steps, "models": models, "events": events });
+    let doc =
+        serde_json::json!({ "exported_by": crate::brand::PRODUCT_NAME, "run": run, "steps": steps, "models": models, "events": events });
     std::fs::write(path, serde_json::to_vec_pretty(&doc).map_err(e)?).map_err(e)
 }
 
@@ -355,7 +385,14 @@ pub fn library_list(s: S, workspace_id: Option<String>) -> Res<LibraryView> {
             }
         }
     }
-    let profiles = s.core.db.profiles().map_err(e)?.into_iter().map(|(id, name, items)| serde_json::json!({"id": id, "display_name": name, "item_ids": items})).collect();
+    let profiles = s
+        .core
+        .db
+        .profiles()
+        .map_err(e)?
+        .into_iter()
+        .map(|(id, name, items)| serde_json::json!({"id": id, "display_name": name, "item_ids": items}))
+        .collect();
     Ok(LibraryView {
         import_candidates: ws.as_deref().map(library::import::candidates).unwrap_or_default(),
         global_root: library::global_root(&s.core.data_dir).to_string_lossy().into_owned(),
@@ -622,7 +659,10 @@ pub fn open_login(s: S, id: String) -> Res<()> {
 fn open_in_terminal(cmd: &str) -> Res<()> {
     #[cfg(target_os = "macos")]
     {
-        let script = format!("tell application \"Terminal\"\n activate\n do script \"{}\"\nend tell", cmd.replace('\\', "\\\\").replace('"', "\\\""));
+        let script = format!(
+            "tell application \"Terminal\"\n activate\n do script \"{}\"\nend tell",
+            cmd.replace('\\', "\\\\").replace('"', "\\\"")
+        );
         std::process::Command::new("osascript").args(["-e", &script]).spawn().map_err(e)?;
         Ok(())
     }
@@ -731,7 +771,14 @@ pub async fn pull_model(s: S<'_>, name: String) -> Res<()> {
                 // Progress at most ~4×/s.
                 if last.elapsed().as_millis() > 250 || p.total > 0 && p.completed == p.total {
                     last = std::time::Instant::now();
-                    c2.bus.send(UiEvent::Pull { model: p.model, status: p.status, completed: p.completed, total: p.total, done: None, error: None });
+                    c2.bus.send(UiEvent::Pull {
+                        model: p.model,
+                        status: p.status,
+                        completed: p.completed,
+                        total: p.total,
+                        done: None,
+                        error: None,
+                    });
                 }
             })
             .await;
@@ -741,7 +788,14 @@ pub async fn pull_model(s: S<'_>, name: String) -> Res<()> {
             Err(err) if cancel.is_cancelled() => (Some(false), Some(format!("Paused: {err}"))),
             Err(err) => (Some(false), Some(format!("{err:#}"))),
         };
-        core.bus.send(UiEvent::Pull { model: name, status: if done == Some(true) { "success".into() } else { "stopped".into() }, completed: 0, total: 0, done, error });
+        core.bus.send(UiEvent::Pull {
+            model: name,
+            status: if done == Some(true) { "success".into() } else { "stopped".into() },
+            completed: 0,
+            total: 0,
+            done,
+            error,
+        });
     });
     Ok(())
 }
@@ -850,7 +904,13 @@ pub struct ProviderView {
 
 #[tauri::command]
 pub fn providers_list(s: S) -> Res<Vec<ProviderView>> {
-    Ok(s.core.db.providers().map_err(e)?.into_iter().map(|row| ProviderView { key_hint: row.key_ref.as_deref().and_then(keychain::hint), row }).collect())
+    Ok(s.core
+        .db
+        .providers()
+        .map_err(e)?
+        .into_iter()
+        .map(|row| ProviderView { key_hint: row.key_ref.as_deref().and_then(keychain::hint), row })
+        .collect())
 }
 
 #[derive(Deserialize)]
@@ -884,7 +944,15 @@ pub async fn connect_provider(s: S<'_>, p: ConnectProvider) -> Res<Vec<CloudMode
     let models = providers::list_models(p.kind, &base, key.as_deref()).await.map_err(e)?;
     s.core
         .db
-        .save_provider(&ProviderRow { id, display_name: p.display_name, kind: p.kind.to_string(), base_url: Some(base), key_ref: key.map(|_| key_ref), enabled: true, monthly_cap_usd: None })
+        .save_provider(&ProviderRow {
+            id,
+            display_name: p.display_name,
+            kind: p.kind.to_string(),
+            base_url: Some(base),
+            key_ref: key.map(|_| key_ref),
+            enabled: true,
+            monthly_cap_usd: None,
+        })
         .map_err(e)?;
     Ok(models)
 }
@@ -946,7 +1014,10 @@ fn model_ref(s: &S, provider_id: &str, name: &str) -> Res<ModelRef> {
         let total = crate::macos::hardware().total_mem_gb;
         let budget = governor::budget_gb(total, settings.memory_budget_pct);
         let dir = crate::governor::service::OllamaService::models_dir(&settings);
-        let size = providers::scan_ollama_store(&dir).into_iter().find(|(n, _)| n == name || n == &format!("{name}:latest")).map(|(_, s)| s as f64 / 1_073_741_824.0);
+        let size = providers::scan_ollama_store(&dir)
+            .into_iter()
+            .find(|(n, _)| n == name || n == &format!("{name}:latest"))
+            .map(|(_, s)| s as f64 / 1_073_741_824.0);
         let cat = s.core.catalog.model(name).cloned();
         let size_gb = size.or(cat.as_ref().map(|c| c.download_gb)).unwrap_or(4.5);
         let ctx = governor::choose_ctx(size_gb, total, budget);
@@ -1024,7 +1095,9 @@ pub async fn connect_model(s: S<'_>, m: ConnectModel) -> Res<Settings> {
             st.budget_planning = true;
         }
         t => {
-            st.executor_pool.retain(|x| !(x.agent_id == entry.agent_id && x.model.provider_id == entry.model.provider_id && x.model.name == entry.model.name));
+            st.executor_pool.retain(|x| {
+                !(x.agent_id == entry.agent_id && x.model.provider_id == entry.model.provider_id && x.model.name == entry.model.name)
+            });
             if t == "pool_front" {
                 st.executor_pool.insert(0, entry);
             } else {
@@ -1055,7 +1128,11 @@ pub async fn smoke_test(s: S<'_>, entry: ExecutorEntry) -> Res<SmokeResult> {
         let settings = s.core.db.settings();
         s.core.ollama.ensure_running(&settings, &s.core.registry, crate::macos::hardware().total_mem_gb).await.map_err(e)?;
     }
-    let base = if m.provider_type == ProviderType::Ollama { m.base_url.clone().unwrap_or_else(|| providers::OLLAMA_DEFAULT.into()) } else { m.base_url.clone().unwrap_or_default() };
+    let base = if m.provider_type == ProviderType::Ollama {
+        m.base_url.clone().unwrap_or_else(|| providers::OLLAMA_DEFAULT.into())
+    } else {
+        m.base_url.clone().unwrap_or_default()
+    };
     let key = m.key_ref.as_deref().and_then(keychain::get);
     match providers::smoke_test(m.provider_type, &base, key.as_deref(), &m.name).await {
         Ok(msg) => {
@@ -1133,7 +1210,8 @@ pub struct WhySlow {
 #[tauri::command]
 pub async fn why_slow(s: S<'_>) -> Res<WhySlow> {
     let snap = s.core.sampler.sample(false).await;
-    let controlled: std::collections::HashSet<u32> = s.core.registry.list().into_iter().flat_map(|p| crate::macos::process_tree(p.pid)).chain([std::process::id()]).collect();
+    let controlled: std::collections::HashSet<u32> =
+        s.core.registry.list().into_iter().flat_map(|p| crate::macos::process_tree(p.pid)).chain([std::process::id()]).collect();
     let others = tokio::task::spawn_blocking(move || {
         let mut sys = sysinfo::System::new();
         sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing().with_memory());

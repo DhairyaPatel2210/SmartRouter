@@ -39,13 +39,41 @@ const HIGH_HARD: &[(&str, &str)] = &[
     ("schema change", "data migration"),
 ];
 const HIGH_SOFT: &[&str] = &[
-    "architect*", "design", "redesign", "debug*", "investigat*", "root cause", "diagnos*", "refactor*", "performance", "optimi*",
-    "rewrite", "restructur*", "integrat*",
+    "architect*",
+    "design",
+    "redesign",
+    "debug*",
+    "investigat*",
+    "root cause",
+    "diagnos*",
+    "refactor*",
+    "performance",
+    "optimi*",
+    "rewrite",
+    "restructur*",
+    "integrat*",
 ];
 const TRIVIAL: &[&str] = &["format", "formatting", "prettier", "commit message", "changelog", "typo", "lint fix", "whitespace"];
 const LOW_SOFT: &[&str] = &[
-    "boilerplate", "test*", "rename", "docs", "documentation", "readme", "comment*", "config*", "scaffold*", "stub", "example",
-    "docstring", "typing", "type hints", "bump", "dependency", "dependencies", "log message", "copy",
+    "boilerplate",
+    "test*",
+    "rename",
+    "docs",
+    "documentation",
+    "readme",
+    "comment*",
+    "config*",
+    "scaffold*",
+    "stub",
+    "example",
+    "docstring",
+    "typing",
+    "type hints",
+    "bump",
+    "dependency",
+    "dependencies",
+    "log message",
+    "copy",
 ];
 
 fn has_word(hay: &str, needle: &str) -> bool {

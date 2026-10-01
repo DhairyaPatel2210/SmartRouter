@@ -77,9 +77,7 @@ pub fn suggestions(cat: &Catalog, check: &HardwareCheck, installed: &[String]) -
         .iter()
         .enumerate()
         .filter(|(_, s)| s.fit == Fit::Fits && s.model.tool_calling)
-        .max_by(|a, b| {
-            (a.1.installed, a.1.model.params_b as i64).cmp(&(b.1.installed, b.1.model.params_b as i64))
-        })
+        .max_by(|a, b| (a.1.installed, a.1.model.params_b as i64).cmp(&(b.1.installed, b.1.model.params_b as i64)))
         .map(|(i, _)| i);
     if let Some(i) = best {
         out[i].best = true;
@@ -88,7 +86,13 @@ pub fn suggestions(cat: &Catalog, check: &HardwareCheck, installed: &[String]) -
 }
 
 /// Runs a catalog install command in a login shell, streaming every line.
-pub async fn run_install(command: &str, registry: &ProcRegistry, owner: &str, cancel: &CancelToken, mut on_line: impl FnMut(&str)) -> Result<()> {
+pub async fn run_install(
+    command: &str,
+    registry: &ProcRegistry,
+    owner: &str,
+    cancel: &CancelToken,
+    mut on_line: impl FnMut(&str),
+) -> Result<()> {
     on_line(&format!("$ {command}"));
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let mut cmd = proc::command(&shell, false);
@@ -96,12 +100,11 @@ pub async fn run_install(command: &str, registry: &ProcRegistry, owner: &str, ca
     if let Some(home) = dirs::home_dir() {
         cmd.current_dir(home);
     }
-    let exit = proc::run_streaming(
-        cmd,
-        RunOpts { registry, owner, label: "installer", timeout: Duration::from_secs(1800), cancel },
-        |_, l| on_line(&crate::adapters::strip_ansi(l)),
-    )
-    .await?;
+    let exit =
+        proc::run_streaming(cmd, RunOpts { registry, owner, label: "installer", timeout: Duration::from_secs(1800), cancel }, |_, l| {
+            on_line(&crate::adapters::strip_ansi(l))
+        })
+        .await?;
     match exit {
         ExitKind::Exited(0) => Ok(()),
         ExitKind::Exited(c) => bail!("install command exited with {c}"),
@@ -164,7 +167,7 @@ pub async fn move_models(from: &Path, to: &Path, cancel: &CancelToken, mut on: i
         }
         let rel = src.strip_prefix(from)?;
         let dst = to.join(rel);
-        if dst.metadata().map(|m| m.len()) .ok() == Some(*size) {
+        if dst.metadata().map(|m| m.len()).ok() == Some(*size) {
             done += size;
             on(done, total);
             continue;

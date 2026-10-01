@@ -98,11 +98,7 @@ fn is_executable(p: &Path) -> bool {
 /// (optionally) lowered priority.
 pub fn command(program: impl AsRef<std::ffi::OsStr>, low_priority: bool) -> Command {
     let mut cmd = Command::new(program);
-    cmd.env("PATH", path_env())
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
+    cmd.env("PATH", path_env()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     #[cfg(unix)]
     {
         cmd.process_group(0);
@@ -180,8 +176,7 @@ impl ProcRegistry {
         }
     }
     pub async fn kill_all(&self, except_owner: Option<&str>) {
-        let pids: Vec<u32> =
-            self.inner.lock().values().filter(|p| Some(p.owner.as_str()) != except_owner).map(|p| p.pid).collect();
+        let pids: Vec<u32> = self.inner.lock().values().filter(|p| Some(p.owner.as_str()) != except_owner).map(|p| p.pid).collect();
         for pid in pids {
             kill_tree(pid).await;
             self.remove(pid);
@@ -266,11 +261,7 @@ pub struct RunOpts<'a> {
 /// Spawns `cmd`, calls `on_line` for every output line as it arrives (no
 /// whole-output buffering) and enforces the timeout and cancellation by
 /// killing the whole process group.
-pub async fn run_streaming(
-    mut cmd: Command,
-    opts: RunOpts<'_>,
-    mut on_line: impl FnMut(Stream, &str),
-) -> Result<ExitKind> {
+pub async fn run_streaming(mut cmd: Command, opts: RunOpts<'_>, mut on_line: impl FnMut(Stream, &str)) -> Result<ExitKind> {
     let mut child: Child = cmd.spawn().context("failed to start process")?;
     let pid = child.id().ok_or_else(|| anyhow!("process exited immediately"))?;
     opts.registry.add(pid, opts.owner, opts.label);

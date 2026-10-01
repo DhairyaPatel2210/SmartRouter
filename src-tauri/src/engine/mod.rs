@@ -138,13 +138,16 @@ pub struct AgentInfo {
     pub known_good_version: String,
 }
 
+/// Shows a notification (title, body).
+pub type Notifier = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
 pub struct CoreDeps {
     pub data_dir: PathBuf,
     pub catalog_dir: PathBuf,
     pub emitter: Arc<dyn Emitter>,
     pub demo_agents: bool,
     /// Shows a macOS notification (title, body) when the window is hidden.
-    pub notifier: Arc<dyn Fn(&str, &str) + Send + Sync>,
+    pub notifier: Notifier,
 }
 
 pub struct Core {
@@ -161,7 +164,7 @@ pub struct Core {
     detect: RwLock<HashMap<String, (DetectResult, Option<AuthStatus>)>>,
     runs: Mutex<HashMap<String, Arc<RunCtl>>>,
     slots: Arc<Semaphore>,
-    notifier: Arc<dyn Fn(&str, &str) + Send + Sync>,
+    notifier: Notifier,
     pub window_visible: AtomicBool,
     pub resource_view_open: AtomicBool,
     pub pulls: Mutex<HashMap<String, CancelToken>>,

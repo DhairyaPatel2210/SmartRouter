@@ -31,6 +31,9 @@ pub const EVENT: &str = "orch://events";
 
 static TRAY_STATUS: OnceLock<MenuItem<tauri::Wry>> = OnceLock::new();
 
+/// Process start, for the perf harness's cold-start measurement.
+pub static STARTED: OnceLock<std::time::Instant> = OnceLock::new();
+
 /// Sends batched core events to the webview and keeps the menu bar summary current.
 struct AppEmitter {
     app: AppHandle,
@@ -124,6 +127,7 @@ fn build_tray(app: &AppHandle, core: Arc<Core>) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    STARTED.get_or_init(std::time::Instant::now);
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             show_main(app);

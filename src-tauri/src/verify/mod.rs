@@ -98,19 +98,16 @@ pub async fn run_checks(
         let mut tail: VecDeque<String> = VecDeque::with_capacity(80);
         let mut cmd = proc::command("sh", low_priority);
         cmd.args(["-c", c]).current_dir(ws).env("CI", "1").env("FORCE_COLOR", "0").env("NO_COLOR", "1");
-        let res = proc::run_streaming(
-            cmd,
-            RunOpts { registry, owner, label: "check", timeout: Duration::from_secs(600), cancel },
-            |_, l| {
+        let res =
+            proc::run_streaming(cmd, RunOpts { registry, owner, label: "check", timeout: Duration::from_secs(600), cancel }, |_, l| {
                 let l = crate::adapters::strip_ansi(l).to_string();
                 on_line(c, &l);
                 if tail.len() == 80 {
                     tail.pop_front();
                 }
                 tail.push_back(l);
-            },
-        )
-        .await;
+            })
+            .await;
         let (passed, code, timed_out) = match res {
             Ok(ExitKind::Exited(code)) => (code == 0, Some(code), false),
             Ok(ExitKind::TimedOut) => (false, None, true),
@@ -172,11 +169,7 @@ mod tests {
     #[test]
     fn detects_node_and_rust_checks() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::write(
-            d.path().join("package.json"),
-            r#"{"scripts":{"test":"vitest","lint":"eslint .","build":"vite build"}}"#,
-        )
-        .unwrap();
+        std::fs::write(d.path().join("package.json"), r#"{"scripts":{"test":"vitest","lint":"eslint .","build":"vite build"}}"#).unwrap();
         std::fs::write(d.path().join("pnpm-lock.yaml"), "").unwrap();
         std::fs::write(d.path().join("Cargo.toml"), "[package]").unwrap();
         assert_eq!(detect_checks(d.path()), vec!["pnpm run lint", "pnpm test -- --run", "cargo test --quiet"]);

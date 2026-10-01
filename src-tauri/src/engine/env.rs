@@ -55,7 +55,15 @@ impl Core {
     }
 
     /// Why an executor-pool entry can't be used right now (`None` = usable).
-    pub async fn entry_block_reason(&self, run_id: &str, e: &ExecutorEntry, ws: Option<&WorkspaceRow>, settings: &Settings, ls: &LocalState, sys: &governor::SysView) -> Option<String> {
+    pub async fn entry_block_reason(
+        &self,
+        run_id: &str,
+        e: &ExecutorEntry,
+        ws: Option<&WorkspaceRow>,
+        settings: &Settings,
+        ls: &LocalState,
+        sys: &governor::SysView,
+    ) -> Option<String> {
         let infos = self.agent_infos();
         let Some(agent) = infos.iter().find(|a| a.id == e.agent_id) else { return Some("unknown agent".into()) };
         if !agent.installed {
@@ -117,13 +125,21 @@ impl Core {
         None
     }
 
-    pub async fn build_env(&self, run_id: &str, ws: Option<&WorkspaceRow>, mode: &ModeDef, settings: &Settings, pool_override: Option<&[ExecutorEntry]>) -> RouteEnv {
+    pub async fn build_env(
+        &self,
+        run_id: &str,
+        ws: Option<&WorkspaceRow>,
+        mode: &ModeDef,
+        settings: &Settings,
+        pool_override: Option<&[ExecutorEntry]>,
+    ) -> RouteEnv {
         let ls = self.local_state(settings).await;
         let sys = governor::sys_view();
         let pool_src: Vec<ExecutorEntry> = pool_override.map(|p| p.to_vec()).unwrap_or_else(|| settings.executor_pool.clone());
         let mut pool = vec![];
         for e in pool_src {
-            let blocked = if e.enabled { self.entry_block_reason(run_id, &e, ws, settings, &ls, &sys).await } else { Some("turned off".into()) };
+            let blocked =
+                if e.enabled { self.entry_block_reason(run_id, &e, ws, settings, &ls, &sys).await } else { Some("turned off".into()) };
             pool.push(PoolStatus { entry: e, blocked });
         }
         let usable = self.usable_agents();

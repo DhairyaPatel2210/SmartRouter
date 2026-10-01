@@ -20,18 +20,55 @@ pub const UI_BATCH: Duration = Duration::from_millis(50);
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UiEvent {
-    Run { run: crate::db::queries::RunRow },
-    Step { step: crate::db::queries::StepRow },
-    Log { run_id: String, step_id: String, line: LogLine },
+    Run {
+        run: crate::db::queries::RunRow,
+    },
+    Step {
+        step: crate::db::queries::StepRow,
+    },
+    Log {
+        run_id: String,
+        step_id: String,
+        line: LogLine,
+    },
     /// Governor/user-facing notice (banner + run log).
-    Notice { level: String, text: String, run_id: Option<String> },
-    Approval { request: crate::engine::ApprovalRequest },
-    ApprovalDone { id: String },
-    Resources { snapshot: sampler::Snapshot },
-    Install { id: String, line: String, done: Option<bool>, progress: Option<f64> },
-    Pull { model: String, status: String, completed: u64, total: u64, done: Option<bool>, error: Option<String> },
-    Move { completed: u64, total: u64, done: Option<bool>, error: Option<String> },
-    Library { workspace: Option<String> },
+    Notice {
+        level: String,
+        text: String,
+        run_id: Option<String>,
+    },
+    Approval {
+        request: crate::engine::ApprovalRequest,
+    },
+    ApprovalDone {
+        id: String,
+    },
+    Resources {
+        snapshot: sampler::Snapshot,
+    },
+    Install {
+        id: String,
+        line: String,
+        done: Option<bool>,
+        progress: Option<f64>,
+    },
+    Pull {
+        model: String,
+        status: String,
+        completed: u64,
+        total: u64,
+        done: Option<bool>,
+        error: Option<String>,
+    },
+    Move {
+        completed: u64,
+        total: u64,
+        done: Option<bool>,
+        error: Option<String>,
+    },
+    Library {
+        workspace: Option<String>,
+    },
     Agents,
 }
 
@@ -120,7 +157,8 @@ impl Logs {
     pub fn open(&self, run_id: &str, step_id: &str, step_idx: i64) {
         let p = self.path(run_id, step_idx);
         let _ = std::fs::create_dir_all(p.parent().unwrap());
-        let file = std::fs::OpenOptions::new().create(true).append(true).open(p).ok().map(|f| std::io::BufWriter::with_capacity(32 * 1024, f));
+        let file =
+            std::fs::OpenOptions::new().create(true).append(true).open(p).ok().map(|f| std::io::BufWriter::with_capacity(32 * 1024, f));
         let mut g = self.inner.lock();
         let e = g.entry(step_id.to_string()).or_insert_with(|| StepLog { ring: VecDeque::new(), file: None, seq: 0 });
         e.file = file;

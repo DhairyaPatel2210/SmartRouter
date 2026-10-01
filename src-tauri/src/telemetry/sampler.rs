@@ -3,7 +3,7 @@
 //! only the process trees the app started, never a full system scan.
 
 use super::{Bus, UiEvent};
-use crate::macos::{self, Pressure, PowerSource, Thermal};
+use crate::macos::{self, PowerSource, Pressure, Thermal};
 use crate::proc::ProcRegistry;
 use crate::providers::Ollama;
 use parking_lot::Mutex;
@@ -214,10 +214,22 @@ impl Sampler {
         if record {
             let w = self.db.writer();
             for p in snap.procs.iter().chain(snap.app.iter()) {
-                w.send(crate::db::WriteOp::Metric { ts: snap.ts, target: p.label.clone(), rss_mb: p.rss_mb, cpu_pct: p.cpu_pct, vram_mb: None });
+                w.send(crate::db::WriteOp::Metric {
+                    ts: snap.ts,
+                    target: p.label.clone(),
+                    rss_mb: p.rss_mb,
+                    cpu_pct: p.cpu_pct,
+                    vram_mb: None,
+                });
             }
             for m in &snap.models {
-                w.send(crate::db::WriteOp::Metric { ts: snap.ts, target: format!("model:{}", m.name), rss_mb: m.mem_mb, cpu_pct: 0.0, vram_mb: Some(m.vram_mb) });
+                w.send(crate::db::WriteOp::Metric {
+                    ts: snap.ts,
+                    target: format!("model:{}", m.name),
+                    rss_mb: m.mem_mb,
+                    cpu_pct: 0.0,
+                    vram_mb: Some(m.vram_mb),
+                });
             }
         }
         if let Some(h) = hooks {

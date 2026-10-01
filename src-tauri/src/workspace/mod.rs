@@ -32,11 +32,8 @@ pub fn display_name(path: &Path) -> String {
 pub async fn inspect(path: &Path) -> WorkspaceInfo {
     let exists = path.is_dir();
     let is_git = exists && git::is_repo(path).await;
-    let (branch, dirty) = if is_git {
-        (git::current_branch(path).await, git::dirty_files(path).await.unwrap_or_default())
-    } else {
-        (None, vec![])
-    };
+    let (branch, dirty) =
+        if is_git { (git::current_branch(path).await, git::dirty_files(path).await.unwrap_or_default()) } else { (None, vec![]) };
     WorkspaceInfo {
         path: path.to_string_lossy().into_owned(),
         name: display_name(path),
@@ -81,8 +78,21 @@ pub fn is_unsafe_root(p: &Path) -> bool {
         }
     }
     const SYSTEM: &[&str] = &[
-        "/System", "/Library", "/usr", "/bin", "/sbin", "/etc", "/var", "/private", "/Applications", "/opt", "/Users", "/Volumes",
-        "/dev", "/tmp", "/cores",
+        "/System",
+        "/Library",
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/etc",
+        "/var",
+        "/private",
+        "/Applications",
+        "/opt",
+        "/Users",
+        "/Volumes",
+        "/dev",
+        "/tmp",
+        "/cores",
     ];
     let s = p.to_string_lossy();
     SYSTEM.iter().any(|root| s == *root || (s.starts_with(&format!("{root}/")) && is_system_subtree(root)))

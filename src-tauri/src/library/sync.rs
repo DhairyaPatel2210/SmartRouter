@@ -157,10 +157,7 @@ fn rules_section(rules: &[&Item]) -> String {
 
 /// SKILL.md in Agent Skills format: only `name` and `description` in frontmatter.
 fn skill_md(i: &Item) -> String {
-    with_frontmatter(
-        vec![("name", Value::String(i.id.clone())), ("description", Value::String(i.description.clone()))],
-        &i.body,
-    )
+    with_frontmatter(vec![("name", Value::String(i.id.clone())), ("description", Value::String(i.description.clone()))], &i.body)
 }
 
 #[derive(Default, Debug, Clone)]
@@ -201,7 +198,8 @@ pub fn plan(items: &[Item], clis: &[&str]) -> SyncPlan {
         }
         for a in &agents {
             let tools = if a.tools.is_empty() { Value::Null } else { Value::String(a.tools.join(", ")) };
-            let model = a.model.as_ref().filter(|m| ["sonnet", "opus", "haiku", "inherit"].contains(&m.as_str()) || m.starts_with("claude-"));
+            let model =
+                a.model.as_ref().filter(|m| ["sonnet", "opus", "haiku", "inherit"].contains(&m.as_str()) || m.starts_with("claude-"));
             p.files.insert(
                 format!(".claude/agents/{}.md", a.id),
                 with_frontmatter(
@@ -223,7 +221,10 @@ pub fn plan(items: &[Item], clis: &[&str]) -> SyncPlan {
                 format!(".cursor/rules/{}.mdc", r.id),
                 with_frontmatter(
                     vec![
-                        ("description", Value::String(if r.description.is_empty() { r.display_name.clone() } else { r.description.clone() })),
+                        (
+                            "description",
+                            Value::String(if r.description.is_empty() { r.display_name.clone() } else { r.description.clone() }),
+                        ),
                         ("globs", globs),
                         ("alwaysApply", Value::Bool(r.always_on)),
                     ],
@@ -250,7 +251,11 @@ pub fn plan(items: &[Item], clis: &[&str]) -> SyncPlan {
             p.files.insert(
                 format!(".github/agents/{}.agent.md", a.id),
                 with_frontmatter(
-                    vec![("name", Value::String(a.id.clone())), ("description", Value::String(a.description.clone())), ("tools", seq(&a.tools))],
+                    vec![
+                        ("name", Value::String(a.id.clone())),
+                        ("description", Value::String(a.description.clone())),
+                        ("tools", seq(&a.tools)),
+                    ],
                     &agent_body(a, items),
                 ),
             );
@@ -481,13 +486,7 @@ pub fn preview(item: &Item, items: &[Item], cli: &str) -> (Support, String) {
     let one = [item.clone()];
     let p = plan(&one, &[cli]);
     let text = match item.kind {
-        Kind::Rule => p
-            .files
-            .values()
-            .next()
-            .cloned()
-            .or_else(|| p.blocks.values().next().cloned())
-            .unwrap_or_default(),
+        Kind::Rule => p.files.values().next().cloned().or_else(|| p.blocks.values().next().cloned()).unwrap_or_default(),
         Kind::Agent if sup != Support::Fallback => p.files.values().next().cloned().unwrap_or_default(),
         Kind::Skill if sup == Support::Native => p.files.values().next().cloned().unwrap_or_default(),
         Kind::Agent => format!("## Role\n{}", agent_body(item, items)),
